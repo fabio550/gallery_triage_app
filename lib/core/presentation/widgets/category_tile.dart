@@ -1,4 +1,3 @@
-
 class CategoryTile extends StatelessWidget {
   final CategorySummary summary;
   final VoidCallback onTap;
@@ -20,6 +19,7 @@ class CategoryTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
     final colors = Theme.of(context).colorScheme;
+    final triageColors = context.triageColors;
 
     return InkWell(
       onTap: onTap,
@@ -42,25 +42,25 @@ class CategoryTile extends StatelessWidget {
                   ),
                   if (_showMetrics) ...[
                     const SizedBox(height: 7),
-                    // TODO: SegmentedProgressBar(
-                    //   total: summary.totalItems,
-                    //   kept: summary.keptItems,
-                    //   classified: summary.classifiedItems,
-                    // )
-                    const SizedBox(height: 6, width: double.infinity),
-                    const SizedBox(height: 6),
+                    ProgressBar(
+                      showLegend: false,
+                      totalItens: summary.totalItems,
+                      primaryItens: summary.classifiedItems,
+                      secondaryItens: summary.keptItems,
+                    ),
                   ] else
                     const SizedBox(height: 3),
-                  Text(summary.countLabel, style: text.labelSmall),
+                  Text(summary.countLabel, style: text.titleSmall),
                 ],
               ),
             ),
             const SizedBox(width: 12),
-            if (_showMetrics)
-              // TODO: ProgressRing(value: summary.keptRatio, size: 38)
-              const SizedBox(width: 38, height: 38)
-            else
-              Icon(Icons.chevron_right, color: colors.onSurfaceVariant),
+            (_showMetrics) ?
+              ProgressCircular(
+                context: context,
+                progressPercent: summary.keptItems / summary.totalItems,
+                progressColor: triageColors.stateKept,
+              ) : Icon(Icons.chevron_right, color: colors.onSurfaceVariant),
           ],
         ),
       ),
