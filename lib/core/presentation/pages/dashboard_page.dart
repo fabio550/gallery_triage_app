@@ -4,52 +4,48 @@ import 'package:gallery_triage_app/core/presentation/widgets/progress_bar.dart';
 import 'package:gallery_triage_app/core/presentation/widgets/progress_circular.dart';
 import 'package:gallery_triage_app/core/presentation/widgets/total_itens_info.dart';
 import 'package:gallery_triage_app/core/presentation/widgets/granularity_selector.dart';
-
 class DashboardPage extends StatefulWidget {
   const DashboardPage({super.key});
-  
+
   @override
   State<DashboardPage> createState() => _DashboardPageState();
 }
 
 class _DashboardPageState extends State<DashboardPage> {
   
-  FilterType selectedFilter = FilterType.all;
-  
+  CategoryGranularity _granularity = CategoryGranularity.all;
+
   @override
   Widget build(BuildContext context) {
-    final text = Theme.of(context).textTheme;
-
-    final totalItens = 62418 == 0 ? 1 : 62418;
-    final totalSize = 21.7;
-    final primaryItens = 18902;
-    final secondaryItens = 27310;
+    
+    const totalItems = 62418;
+    const totalSizeGb = 21.7;
+    const classifiedItems = 18902;
+    const keptItems = 27310;
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          'Triagem',
-          style: text.titleMedium,
-        ),
-      ),
+      appBar: AppBar(title: const Text('Triagem')),
       body: Column(
-        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          InfoStatsCard(
-            totalItens: totalItens,
-            totalSize: totalSize,
-            primaryItens: primaryItens,
-            secondaryItens: secondaryItens,
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 16),
+            child: InfoStatsCard(
+              totalItems: totalItems,
+              totalSizeGb: totalSizeGb,
+              classifiedItems: classifiedItems,
+              keptItems: keptItems,
+            ),
           ),
-          SizedBox(height: 12),
-          GranularitySelector(
-            selectedFilter: selectedFilter,
-            onFilterChanged: (newFilter) {
-              setState(() {
-                selectedFilter = newFilter; // Atualiza a tela com o novo valor
-              });
-            },
+          const SizedBox(height: 12),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: GranularitySelector(
+              selected: _granularity,
+              onChanged: (value) => setState(() => _granularity = value),
+            ),
           ),
+          const SizedBox(height: 8),
+          const Expanded(child: SizedBox()),
         ],
       ),
     );
