@@ -2,11 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:gallery_triage_app/core/presentation/theme/triage_colors.dart';
 
 class ProgressBar extends StatelessWidget {
+  final bool showLegend;
   final int totalItens;
   final int primaryItens;
   final int secondaryItens;
 
   const ProgressBar({
+    this.showLegend = true,
     required this.totalItens,
     required this.primaryItens,
     required this.secondaryItens,
@@ -42,7 +44,8 @@ class ProgressBar extends StatelessWidget {
                 borderRadius: BorderRadius.circular(4),
               ),
               LinearProgressIndicator(
-                value: secondaryPercent.clamp(0.0, 1.0),                backgroundColor: Colors.transparent,
+                value: secondaryPercent.clamp(0.0, 1.0),                
+                backgroundColor: Colors.transparent,
                 valueColor: AlwaysStoppedAnimation<Color>(
                   triageColors.stateKept,
                 ),
@@ -50,7 +53,8 @@ class ProgressBar extends StatelessWidget {
                 borderRadius: BorderRadius.circular(4),
               ),
               LinearProgressIndicator(
-                value: primaryPercent.clamp(0.0, 1.0),                backgroundColor: Colors.transparent,
+                value: primaryPercent.clamp(0.0, 1.0),                
+                backgroundColor: Colors.transparent,
                 valueColor: AlwaysStoppedAnimation<Color>(
                   triageColors.stateClassified,
                 ),
@@ -60,50 +64,53 @@ class ProgressBar extends StatelessWidget {
             ],
           ),
           SizedBox(height: 12,),
-          Text.rich(
-            TextSpan(
-              text: '●',
-              style: text.titleMedium?.copyWith(
-                color: triageColors.stateClassified,
+          showLegend ? Column(children:
+          [
+            Text.rich(
+              TextSpan(
+                text: '●',
+                style: text.titleMedium?.copyWith(
+                  color: triageColors.stateClassified,
+                ),
+                children: [
+                  TextSpan(
+                    text: ' Classificados - ',
+                    style: text.titleSmall?.copyWith(
+                      color: color.onSurfaceVariant,
+                    ),
+                  ),
+                  TextSpan(
+                    text: '$primaryItens',
+                    style: text.titleSmall?.copyWith(
+                      color: color.onSurfaceVariant,
+                    ),
+                  ),
+                ],
               ),
-              children: [
-                TextSpan(
-                  text: ' Classificados - ',
-                  style: text.titleSmall?.copyWith(
-                    color: color.onSurfaceVariant,
-                  ),
-                ),
-                TextSpan(
-                  text: '$primaryItens',
-                  style: text.titleSmall?.copyWith(
-                    color: color.onSurfaceVariant,
-                  ),
-                ),
-              ],
             ),
-          ),
-          Text.rich(
-            TextSpan(
-              text: '●',
-              style: text.titleMedium?.copyWith(
-                color: triageColors.stateKept,
+            Text.rich(
+              TextSpan(
+                text: '●',
+                style: text.titleMedium?.copyWith(
+                  color: triageColors.stateKept,
+                ),
+                children: [
+                  TextSpan(
+                    text: ' Mantidos - ',
+                    style: text.titleSmall?.copyWith(
+                      color: color.onSurfaceVariant,
+                    ),
+                  ),
+                  TextSpan(
+                    text: '$secondaryItens',
+                    style: text.titleSmall?.copyWith(
+                      color: color.onSurfaceVariant,
+                    ),
+                  ),
+                ],
               ),
-              children: [
-                TextSpan(
-                  text: ' Mantidos - ',
-                  style: text.titleSmall?.copyWith(
-                    color: color.onSurfaceVariant,
-                  ),
-                ),
-                TextSpan(
-                  text: '$secondaryItens',
-                  style: text.titleSmall?.copyWith(
-                    color: color.onSurfaceVariant,
-                  ),
-                ),
-              ],
             ),
-          ),
+          ]) : SizedBox(),
         ],
       ),
     );
