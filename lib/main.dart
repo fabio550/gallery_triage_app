@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:gallery_triage_app/core/presentation/theme/app_theme.dart';
 import 'package:gallery_triage_app/core/routes/app_router.dart';
 
 void main() {
@@ -14,7 +15,8 @@ void main() {
           return MaterialApp.router(
             title: 'Driver Analytics',
             debugShowCheckedModeBanner: false,
-            themeMode: ThemeMode.system,
+            themeMode: ThemeMode.dark,
+            theme: AppTheme.dark,
             routerConfig: router,
           );
         },
