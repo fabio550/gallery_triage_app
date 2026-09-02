@@ -38,3 +38,22 @@ class CategorySummary {
       ? '$totalItems itens · tudo decidido'
       : '$totalItems itens · $undecidedItems sem decisão';
 }
+
+class CategoryRef {
+  const CategoryRef({
+    required this.granularity,
+    required this.key,
+  });
+
+  final CategoryGranularity granularity;
+  final String key;
+
+  @override
+  bool operator ==(Object other) =>
+      other is CategoryRef &&
+      other.granularity == granularity &&
+      other.key == key;
+
+  @override
+  int get hashCode => Object.hash(granularity, key);
+}
