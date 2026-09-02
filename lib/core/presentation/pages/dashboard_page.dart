@@ -3,6 +3,7 @@ import 'package:gallery_triage_app/core/presentation/theme/triage_colors.dart';
 import 'package:gallery_triage_app/core/presentation/widgets/progress_bar.dart';
 import 'package:gallery_triage_app/core/presentation/widgets/progress_circular.dart';
 import 'package:gallery_triage_app/core/presentation/widgets/total_itens_info.dart';
+import 'package:gallery_triage_app/core/presentation/widgets/granularity_selector.dart';
 
 class DashboardPage extends StatefulWidget {
   const DashboardPage({super.key});
@@ -41,7 +42,7 @@ class _DashboardPageState extends State<DashboardPage> {
             secondaryItens: secondaryItens,
           ),
           SizedBox(height: 12),
-          FilterMenu(
+          GranularitySelector(
             selectedFilter: selectedFilter,
             onFilterChanged: (newFilter) {
               setState(() {
