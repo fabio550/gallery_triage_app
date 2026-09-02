@@ -4,6 +4,7 @@ import 'package:gallery_triage_app/core/presentation/widgets/progress_bar.dart';
 import 'package:gallery_triage_app/core/presentation/widgets/progress_circular.dart';
 import 'package:gallery_triage_app/core/presentation/widgets/total_itens_info.dart';
 import 'package:gallery_triage_app/core/presentation/widgets/granularity_selector.dart';
+
 class DashboardPage extends StatefulWidget {
   const DashboardPage({super.key});
 
@@ -18,11 +19,13 @@ class _DashboardPageState extends State<DashboardPage> {
   @override
   Widget build(BuildContext context) {
     
+    // TEMPORÁRIO: dados fixos até o repositório existir.
     const totalItems = 62418;
     const totalSizeGb = 21.7;
     const classifiedItems = 18902;
     const keptItems = 27310;
-
+    final categories = MockCategories.of(_granularity);
+    
     return Scaffold(
       appBar: AppBar(title: const Text('Triagem')),
       body: Column(
@@ -45,7 +48,13 @@ class _DashboardPageState extends State<DashboardPage> {
             ),
           ),
           const SizedBox(height: 8),
-          const Expanded(child: SizedBox()),
+          Expanded(
+            child: CategoryList(
+              categories: categories,
+              granularity: _granularity,
+              onCategoryTap: (summary) => debugPrint(summary.ref.key),
+            ),
+          ),
         ],
       ),
     );
