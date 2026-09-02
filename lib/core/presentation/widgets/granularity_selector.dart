@@ -55,8 +55,6 @@ class GranularitySelector extends StatelessWidget {
 extension CategoryGranularityLabel on CategoryGranularity {
   String get label => switch (this) {
         CategoryGranularity.all => 'Todos os itens',
-        CategoryGranularity.day => 'Dia',
-        CategoryGranularity.week => 'Semana',
         CategoryGranularity.month => 'Mês',
         CategoryGranularity.year => 'Ano',
         CategoryGranularity.type => 'Tipo',
