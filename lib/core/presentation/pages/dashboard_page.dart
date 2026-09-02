@@ -4,12 +4,19 @@ import 'package:gallery_triage_app/core/presentation/widgets/progress_bar.dart';
 import 'package:gallery_triage_app/core/presentation/widgets/progress_circular.dart';
 import 'package:gallery_triage_app/core/presentation/widgets/total_itens_info.dart';
 
-class DashboardPage extends StatelessWidget {
+class DashboardPage extends StatefulWidget {
   const DashboardPage({super.key});
+  
+  @override
+  State<DashboardPage> createState() => _DashboardPageState();
+}
 
+class _DashboardPageState extends State<DashboardPage> {
+  
+  FilterType selectedFilter = FilterType.all;
+  
   @override
   Widget build(BuildContext context) {
-
     final text = Theme.of(context).textTheme;
 
     final totalItens = 62418 == 0 ? 1 : 62418;
@@ -32,6 +39,15 @@ class DashboardPage extends StatelessWidget {
             totalSize: totalSize,
             primaryItens: primaryItens,
             secondaryItens: secondaryItens,
+          ),
+          SizedBox(height: 12),
+          FilterMenu(
+            selectedFilter: selectedFilter,
+            onFilterChanged: (newFilter) {
+              setState(() {
+                selectedFilter = newFilter; // Atualiza a tela com o novo valor
+              });
+            },
           ),
         ],
       ),
