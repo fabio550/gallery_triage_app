@@ -1,3 +1,9 @@
+import 'package:flutter/material.dart';
+import 'package:gallery_triage_app/core/domain/models/category_summary.dart';
+import 'package:gallery_triage_app/core/presentation/theme/triage_colors.dart';
+import 'package:gallery_triage_app/core/presentation/widgets/progress_bar.dart';
+import 'package:gallery_triage_app/core/presentation/widgets/progress_circular.dart';
+
 class CategoryTile extends StatelessWidget {
   final CategorySummary summary;
   final VoidCallback onTap;
@@ -44,9 +50,9 @@ class CategoryTile extends StatelessWidget {
                     const SizedBox(height: 7),
                     ProgressBar(
                       showLegend: false,
-                      totalItens: summary.totalItems,
-                      primaryItens: summary.classifiedItems,
-                      secondaryItens: summary.keptItems,
+                      totalItems: summary.totalItems,
+                      classifiedItems: summary.classifiedItems,
+                      keptItems: summary.keptItems,
                     ),
                   ] else
                     const SizedBox(height: 3),
@@ -63,6 +69,26 @@ class CategoryTile extends StatelessWidget {
               ) : Icon(Icons.chevron_right, color: colors.onSurfaceVariant),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _Cover extends StatelessWidget {
+  const _Cover({this.itemId});
+ 
+  final String? itemId;
+ 
+  @override
+  Widget build(BuildContext context) {
+    // Placeholder até o provider de miniatura existir. Falha de leitura
+    // não impede a linha de funcionar (§7).
+    return Container(
+      width: 46,
+      height: 46,
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerHigh,
+        borderRadius: BorderRadius.circular(12),
       ),
     );
   }

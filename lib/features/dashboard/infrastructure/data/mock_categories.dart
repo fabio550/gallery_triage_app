@@ -1,3 +1,6 @@
+import 'package:gallery_triage_app/core/domain/enums/category_granularity.dart';
+import 'package:gallery_triage_app/core/domain/models/category_summary.dart';
+
 abstract final class MockCategories {
   static List<CategorySummary> of(CategoryGranularity granularity) {
     return switch (granularity) {

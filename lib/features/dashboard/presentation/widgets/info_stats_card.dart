@@ -1,14 +1,20 @@
+import 'package:flutter/material.dart';
+import 'package:gallery_triage_app/core/presentation/theme/triage_colors.dart';
+import 'package:gallery_triage_app/core/presentation/widgets/progress_bar.dart';
+import 'package:gallery_triage_app/core/presentation/widgets/progress_circular.dart';
+import 'package:gallery_triage_app/features/dashboard/presentation/widgets/total_items_info.dart';
+
 class InfoStatsCard extends StatelessWidget {
-    final int totalItens;
-    final double totalSize;
-    final int primaryItens;
-    final int secondaryItens;
+    final int totalItems;
+    final double totalSizeGb;
+    final int classifiedItems;
+    final int keptItems;
 
   const InfoStatsCard({
-    required this.totalItens,
-    required this.totalSize,
-    required this.primaryItens,
-    required this.secondaryItens,
+    required this.totalItems,
+    required this.totalSizeGb,
+    required this.classifiedItems,
+    required this.keptItems,
     super.key,
   });
   
@@ -16,8 +22,8 @@ class InfoStatsCard extends StatelessWidget {
   Widget build(BuildContext context) {
     
     final triageColors = context.triageColors;
-    final primaryPercent = primaryItens / totalItens;
-    final secondaryPercent = secondaryItens / totalItens;
+    final classifiedIPercent = classifiedItems / totalItems;
+    final keptPercent = keptItems / totalItems;
 
     return Center(
       child: SizedBox(
@@ -31,15 +37,15 @@ class InfoStatsCard extends StatelessWidget {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    TotalItensInfo(
-                      totalItens: totalItens,
-                      totalSize: totalSize,
+                    TotalItemsInfo(
+                      totalItems: totalItems,
+                      totalSizeGb: totalSizeGb,
                     ),
                     SizedBox(height: 8,),
                     ProgressBar(
-                      totalItens: totalItens,
-                      primaryItens: primaryItens,
-                      secondaryItens: secondaryItens,
+                      totalItems: totalItems,
+                      classifiedItems: classifiedItems,
+                      keptItems: keptItems,
                     ),
                   ],
                 ),
@@ -50,13 +56,13 @@ class InfoStatsCard extends StatelessWidget {
                   children: [
                     ProgressCircular(
                       context: context,
-                      progressPercent: primaryPercent,
+                      progressPercent: classifiedIPercent,
                       progressColor: triageColors.stateClassified,
                     ),
                     SizedBox(height: 20,),
                     ProgressCircular(
                       context: context,
-                      progressPercent: secondaryPercent,
+                      progressPercent: keptPercent,
                       progressColor: triageColors.stateKept,
                     ),
                   ],

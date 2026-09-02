@@ -1,3 +1,5 @@
+import 'package:gallery_triage_app/core/domain/enums/category_granularity.dart';
+
 class CategorySummary {
   const CategorySummary({
     required this.ref,

@@ -3,15 +3,15 @@ import 'package:gallery_triage_app/core/presentation/theme/triage_colors.dart';
 
 class ProgressBar extends StatelessWidget {
   final bool showLegend;
-  final int totalItens;
-  final int primaryItens;
-  final int secondaryItens;
+  final int totalItems;
+  final int classifiedItems;
+  final int keptItems;
 
   const ProgressBar({
     this.showLegend = true,
-    required this.totalItens,
-    required this.primaryItens,
-    required this.secondaryItens,
+    required this.totalItems,
+    required this.classifiedItems,
+    required this.keptItems,
     super.key
   });
 
@@ -22,10 +22,10 @@ class ProgressBar extends StatelessWidget {
   final triageColors = context.triageColors;
   final text = Theme.of(context).textTheme;
 
-  final total = totalItens == 0 ? 1 : totalItens;
+  final total = totalItems == 0 ? 1 : totalItems;
 
-  final primaryPercent = primaryItens / total;
-  final secondaryPercent = secondaryItens / total;
+  final classifiedPercent = classifiedItems / total;
+  final keptPercent = keptItems / total;
 
     return SizedBox(
       width: 160,
@@ -44,7 +44,7 @@ class ProgressBar extends StatelessWidget {
                 borderRadius: BorderRadius.circular(4),
               ),
               LinearProgressIndicator(
-                value: secondaryPercent.clamp(0.0, 1.0),                
+                value: keptPercent.clamp(0.0, 1.0),                
                 backgroundColor: Colors.transparent,
                 valueColor: AlwaysStoppedAnimation<Color>(
                   triageColors.stateKept,
@@ -53,7 +53,7 @@ class ProgressBar extends StatelessWidget {
                 borderRadius: BorderRadius.circular(4),
               ),
               LinearProgressIndicator(
-                value: primaryPercent.clamp(0.0, 1.0),                
+                value: classifiedPercent.clamp(0.0, 1.0),                
                 backgroundColor: Colors.transparent,
                 valueColor: AlwaysStoppedAnimation<Color>(
                   triageColors.stateClassified,
@@ -80,7 +80,7 @@ class ProgressBar extends StatelessWidget {
                     ),
                   ),
                   TextSpan(
-                    text: '$primaryItens',
+                    text: '$classifiedItems',
                     style: text.titleSmall?.copyWith(
                       color: color.onSurfaceVariant,
                     ),
@@ -102,7 +102,7 @@ class ProgressBar extends StatelessWidget {
                     ),
                   ),
                   TextSpan(
-                    text: '$secondaryItens',
+                    text: '$keptItems',
                     style: text.titleSmall?.copyWith(
                       color: color.onSurfaceVariant,
                     ),

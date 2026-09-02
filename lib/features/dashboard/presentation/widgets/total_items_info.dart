@@ -2,11 +2,11 @@ import 'package:flutter/material.dart';
 
 class TotalItemsInfo extends StatelessWidget {
   final int totalItems;
-  final double totalSize;
+  final double totalSizeGb;
 
   const TotalItemsInfo({
     required this.totalItems,
-    required this.totalSize,
+    required this.totalSizeGb,
     super.key
   });
 
@@ -21,7 +21,7 @@ class TotalItemsInfo extends StatelessWidget {
       children: [
         Text.rich(
           TextSpan(
-            text: totalItens.toString().replaceAllMapped(
+            text: totalItems.toString().replaceAllMapped(
               RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), 
               (m) => '${m[1]}.'
             ).toString(),
@@ -37,7 +37,7 @@ class TotalItemsInfo extends StatelessWidget {
           )
         ),
         Text(
-          '${totalSize.toStringAsFixed(1)} GB',
+          '${totalSizeGb.toStringAsFixed(1)} GB',
           style: text.bodyMedium?.copyWith(
             color: color.onSurfaceVariant, 
           ),

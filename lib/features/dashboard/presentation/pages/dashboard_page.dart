@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:gallery_triage_app/core/presentation/theme/triage_colors.dart';
-import 'package:gallery_triage_app/core/presentation/widgets/progress_bar.dart';
-import 'package:gallery_triage_app/core/presentation/widgets/progress_circular.dart';
-import 'package:gallery_triage_app/core/presentation/widgets/total_itens_info.dart';
-import 'package:gallery_triage_app/core/presentation/widgets/granularity_selector.dart';
+import 'package:gallery_triage_app/core/domain/enums/category_granularity.dart';
+import 'package:gallery_triage_app/features/dashboard/infrastructure/data/mock_categories.dart';
+import 'package:gallery_triage_app/features/dashboard/presentation/widgets/category_list.dart';
+import 'package:gallery_triage_app/features/dashboard/presentation/widgets/granularity_selector.dart';
+import 'package:gallery_triage_app/features/dashboard/presentation/widgets/info_stats_card.dart';
 
 class DashboardPage extends StatefulWidget {
   const DashboardPage({super.key});

@@ -1,3 +1,8 @@
+import 'package:flutter/material.dart';
+import 'package:gallery_triage_app/core/domain/enums/category_granularity.dart';
+import 'package:gallery_triage_app/core/domain/models/category_summary.dart';
+import 'package:gallery_triage_app/features/dashboard/presentation/widgets/category_tile.dart';
+
 class CategoryList extends StatelessWidget {
   final List<CategorySummary> categories;
   final CategoryGranularity granularity;
@@ -51,26 +56,6 @@ class _EmptyGallery extends StatelessWidget {
           textAlign: TextAlign.center,
           style: text.bodySmall,
         ),
-      ),
-    );
-  }
-}
-
-class _Cover extends StatelessWidget {
-  const _Cover({this.itemId});
- 
-  final String? itemId;
- 
-  @override
-  Widget build(BuildContext context) {
-    // Placeholder até o provider de miniatura existir. Falha de leitura
-    // não impede a linha de funcionar (§7).
-    return Container(
-      width: 46,
-      height: 46,
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerHigh,
-        borderRadius: BorderRadius.circular(12),
       ),
     );
   }

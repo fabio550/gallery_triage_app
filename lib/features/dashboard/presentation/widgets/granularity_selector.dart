@@ -1,3 +1,7 @@
+import 'package:flutter/material.dart';
+import 'package:gallery_triage_app/core/domain/enums/category_granularity.dart';
+import 'package:gallery_triage_app/features/dashboard/presentation/widgets/granularity_picker_sheet.dart';
+
 class GranularitySelector extends StatelessWidget {
   const GranularitySelector({
     required this.selected,
