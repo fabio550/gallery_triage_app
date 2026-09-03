@@ -4,7 +4,6 @@ import 'package:gallery_triage_app/features/dashboard/infrastructure/data/mock_c
 import 'package:gallery_triage_app/features/dashboard/presentation/widgets/category_list.dart';
 import 'package:gallery_triage_app/features/dashboard/presentation/widgets/granularity_selector.dart';
 import 'package:gallery_triage_app/features/dashboard/presentation/widgets/info_stats_card.dart';
-
 class DashboardPage extends StatefulWidget {
   const DashboardPage({super.key});
 
@@ -49,10 +48,13 @@ class _DashboardPageState extends State<DashboardPage> {
           ),
           const SizedBox(height: 8),
           Expanded(
-            child: CategoryList(
-              categories: categories,
-              granularity: _granularity,
-              onCategoryTap: (summary) => debugPrint(summary.ref.key),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: CategoryList(
+                categories: categories,
+                granularity: _granularity,
+                onCategoryTap: (summary) => debugPrint(summary.ref.key),
+              ),
             ),
           ),
         ],
