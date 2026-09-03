@@ -3,7 +3,6 @@ import 'package:gallery_triage_app/core/domain/enums/category_granularity.dart';
 import 'package:gallery_triage_app/core/domain/models/category_summary.dart';
 import 'package:gallery_triage_app/features/dashboard/presentation/widgets/category_tile.dart';
 import 'package:go_router/go_router.dart';
-
 class CategoryList extends StatelessWidget {
   final List<CategorySummary> categories;
   final CategoryGranularity granularity;
@@ -19,7 +18,7 @@ class CategoryList extends StatelessWidget {
     @override
   Widget build(BuildContext context) {
     
-      if (categories.isEmpty) return const _EmptyGallery();
+    if (categories.isEmpty) return const _EmptyGallery();
 
     final isAlbum = granularity == CategoryGranularity.album;
 
@@ -28,15 +27,15 @@ class CategoryList extends StatelessWidget {
       itemCount: categories.length,
       itemBuilder: (context, index) {
         final summary = categories[index];
-        return isAlbum
-          ? CategoryTile.album(
-              summary: summary,
-              onTap: () => context.push('/triage-page', extra: categories[index])
-            )
-          : CategoryTile(
-              summary: summary,
-              onTap: () => context.push('/triage-page', extra: categories[index])
-            );
+        return isAlbum ?
+          CategoryTile.album(
+            summary: summary,
+            onTap: () => context.push('/triage-page', extra: categories[index])
+          ) :
+          CategoryTile(
+            summary: summary,
+            onTap: () => context.push('/triage-page', extra: categories[index])
+          );
       },
     );
   }
