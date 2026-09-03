@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:gallery_triage_app/core/presentation/theme/triage_colors.dart';
-
 class ProgressBar extends StatelessWidget {
   final bool showLegend;
   final int totalItems;
@@ -27,61 +26,62 @@ class ProgressBar extends StatelessWidget {
   final classifiedPercent = classifiedItems / total;
   final keptPercent = keptItems / total;
 
-    return SizedBox(
-      width: 160,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Stack(
-            children: [
-              LinearProgressIndicator(
-                value: 1,
-                backgroundColor: Colors.transparent,
-                valueColor: AlwaysStoppedAnimation<Color>(
-                  color.outline,
-                ),
-                minHeight: 8,
-                borderRadius: BorderRadius.circular(4),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Stack(
+          children: [
+            LinearProgressIndicator(
+              value: 1,
+              backgroundColor: Colors.transparent,
+              valueColor: AlwaysStoppedAnimation<Color>(
+                color.outline,
               ),
-              LinearProgressIndicator(
-                value: keptPercent.clamp(0.0, 1.0),                
-                backgroundColor: Colors.transparent,
-                valueColor: AlwaysStoppedAnimation<Color>(
-                  triageColors.stateKept,
-                ),
-                minHeight: 8,
-                borderRadius: BorderRadius.circular(4),
+              minHeight: 8,
+              borderRadius: BorderRadius.circular(4),
+            ),
+            LinearProgressIndicator(
+              value: keptPercent.clamp(0.0, 1.0),                
+              backgroundColor: Colors.transparent,
+              valueColor: AlwaysStoppedAnimation<Color>(
+                triageColors.stateKept,
               ),
-              LinearProgressIndicator(
-                value: classifiedPercent.clamp(0.0, 1.0),                
-                backgroundColor: Colors.transparent,
-                valueColor: AlwaysStoppedAnimation<Color>(
-                  triageColors.stateClassified,
-                ),
-                minHeight: 8,
-                borderRadius: BorderRadius.circular(4),
+              minHeight: 8,
+              borderRadius: BorderRadius.circular(4),
+            ),
+            LinearProgressIndicator(
+              value: classifiedPercent.clamp(0.0, 1.0),                
+              backgroundColor: Colors.transparent,
+              valueColor: AlwaysStoppedAnimation<Color>(
+                triageColors.stateClassified,
               ),
-            ],
-          ),
-          SizedBox(height: 12,),
-          showLegend ? Column(children:
-          [
+              minHeight: 8,
+              borderRadius: BorderRadius.circular(4),
+            ),
+          ],
+        ),
+        SizedBox(height: 12,),
+        !showLegend ? SizedBox() : 
+        Wrap(
+          spacing: 12,
+          runSpacing: 4,
+          children: [
             Text.rich(
               TextSpan(
                 text: '●',
-                style: text.titleMedium?.copyWith(
+                style: text.labelSmall?.copyWith(
                   color: triageColors.stateClassified,
                 ),
                 children: [
                   TextSpan(
                     text: ' Classificados - ',
-                    style: text.titleSmall?.copyWith(
+                    style: text.labelSmall?.copyWith(
                       color: color.onSurfaceVariant,
                     ),
                   ),
                   TextSpan(
                     text: '$classifiedItems',
-                    style: text.titleSmall?.copyWith(
+                    style: text.labelSmall?.copyWith(
                       color: color.onSurfaceVariant,
                     ),
                   ),
@@ -91,28 +91,50 @@ class ProgressBar extends StatelessWidget {
             Text.rich(
               TextSpan(
                 text: '●',
-                style: text.titleMedium?.copyWith(
+                style: text.labelSmall?.copyWith(
                   color: triageColors.stateKept,
                 ),
                 children: [
                   TextSpan(
                     text: ' Mantidos - ',
-                    style: text.titleSmall?.copyWith(
+                    style: text.labelSmall?.copyWith(
                       color: color.onSurfaceVariant,
                     ),
                   ),
                   TextSpan(
                     text: '$keptItems',
-                    style: text.titleSmall?.copyWith(
+                    style: text.labelSmall?.copyWith(
                       color: color.onSurfaceVariant,
                     ),
                   ),
                 ],
               ),
             ),
-          ]) : SizedBox(),
-        ],
-      ),
+            Text.rich(
+              TextSpan(
+                text: '●',
+                style: text.labelSmall?.copyWith(
+                  color: color.outline,
+                ),
+                children: [
+                  TextSpan(
+                    text: ' Não decididos - ',
+                    style: text.labelSmall?.copyWith(
+                      color: color.onSurfaceVariant,
+                    ),
+                  ),
+                  TextSpan(
+                    text: '${total - keptItems}',
+                    style: text.labelSmall?.copyWith(
+                      color: color.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ],
     );
   }
 }
