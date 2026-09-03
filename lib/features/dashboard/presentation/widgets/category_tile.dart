@@ -3,7 +3,6 @@ import 'package:gallery_triage_app/core/domain/models/category_summary.dart';
 import 'package:gallery_triage_app/core/presentation/theme/triage_colors.dart';
 import 'package:gallery_triage_app/core/presentation/widgets/progress_bar.dart';
 import 'package:gallery_triage_app/core/presentation/widgets/progress_circular.dart';
-
 class CategoryTile extends StatelessWidget {
   final CategorySummary summary;
   final VoidCallback onTap;
@@ -30,7 +29,7 @@ class CategoryTile extends StatelessWidget {
     return InkWell(
       onTap: onTap,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
         child: Row(
           children: [
             _Cover(itemId: summary.coverItemId),
@@ -48,12 +47,15 @@ class CategoryTile extends StatelessWidget {
                   ),
                   if (_showMetrics) ...[
                     const SizedBox(height: 7),
-                    ProgressBar(
-                      showLegend: false,
-                      totalItems: summary.totalItems,
-                      classifiedItems: summary.classifiedItems,
-                      keptItems: summary.keptItems,
-                    ),
+                    Padding(
+                      padding: EdgeInsetsGeometry.only(right: 16),
+                      child: ProgressBar(
+                        showLegend: false,
+                        totalItems: summary.totalItems,
+                        classifiedItems: summary.classifiedItems,
+                        keptItems: summary.keptItems,
+                      ),
+                    )
                   ] else
                     const SizedBox(height: 3),
                   Text(summary.countLabel, style: text.titleSmall),
