@@ -21,15 +21,17 @@
 //---21.DASHBOARD-PAGE********************
 //---22.MOCK-CATEGORIES
 //---23.TRIAGE-PAGE********************
-//---24.IMAGE-SELECTOR********************
-//---25.MINI-IMAGE-CARD********************
-//---26.IMAGE-INCLINATION-EFFECT********************
-//---27.IMAGE-CARD********************
+//---24.TRIAGE-CAROUSEL********************
+//---25.CAROUSEL-THUMB********************
+//---26.TRIAGE-CARD********************
+//---27.MEDIA-CARD********************
+//---28.SWIPE-OVERLAY********************
 //--------------------------------------------------//1.IMPORTS
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'dart:math' as math;
+import 'package:flutter/physics.dart';
 //-------------------------------------------------//2.MAIN
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -1491,27 +1493,29 @@ class TriagePage extends StatelessWidget {
               keptItems: category.keptItems,
             ),
           ),
-          ImageSelector(items: items),
+          Expanded(
+            child: TriageCarousel(items: items),
+          )
         ]
       ),
     );
   }
 }
 
-//-------------------------------------------------//24.IMAGE-SELECTOR
-class ImageSelector extends StatefulWidget {
+//-------------------------------------------------//24.TRIAGE-CAROUSEL
+class TriageCarousel extends StatefulWidget {
   final List<Color> items;
     
-  ImageSelector({
+  const TriageCarousel({
     required this.items,
     super.key
   });
 
   @override
-  State<ImageSelector> createState() => _ImageSelectorState();
+  State<TriageCarousel> createState() => _TriageCarouselState();
 }
 
-class _ImageSelectorState extends State<ImageSelector> {
+class _TriageCarouselState extends State<TriageCarousel> {
   int selectedIndex = 1; // Índice selecionado por padrão
 
   @override
@@ -1525,7 +1529,7 @@ class _ImageSelectorState extends State<ImageSelector> {
             itemCount: widget.items.length,
             padding: const EdgeInsets.symmetric(horizontal: 16),
             itemBuilder: (context, index) {
-              return MiniImageCard(
+              return CarouselThumb(
                 index: index,
                 isSelected: selectedIndex == index,
                 color: widget.items[index],
@@ -1538,15 +1542,9 @@ class _ImageSelectorState extends State<ImageSelector> {
             },
           ),
         ),
-        Padding(
-          padding: EdgeInsetsGeometry.symmetric(
-            horizontal: 16, vertical: 20,
-          ),
-          child: SizedBox(
-            height: 500,
-            child: ImageCard(
-              color: widget.items[selectedIndex],
-            ),
+        Expanded(
+          child: TriageCard(
+            color: widget.items[selectedIndex],
           ),
         ),
       ]
@@ -1554,14 +1552,14 @@ class _ImageSelectorState extends State<ImageSelector> {
   }
 }
 
-//-------------------------------------------------//25.MINI-IMAGE-CARD
-class MiniImageCard extends StatelessWidget {
+//-------------------------------------------------//25.CAROUSEL-THUMB
+class CarouselThumb extends StatelessWidget {
   final int index;
   final bool isSelected;
   final Color color;
   final VoidCallback onTap;
   
-  const MiniImageCard({
+  const CarouselThumb({
     required this.index,
     required this.isSelected,
     required this.color,
@@ -1600,101 +1598,175 @@ class MiniImageCard extends StatelessWidget {
     );
   }
 }
-//-------------------------------------------------//26.IMAGE-INCLINATION-EFFECT
+//-------------------------------------------------//26.TRIAGE-CARD
 
-class ImageInclinationEffect extends StatefulWidget {
+class TriageCard extends StatefulWidget {
   final Color color;
-  
-  const ImageInclinationEffect({
+
+  /// Card de baixo da pilha. Opcional: sem ele o efeito continua, só
+  /// perde a sensação de profundidade.
+  final Widget? behind;
+
+  const TriageCard({
     required this.color,
+    this.behind,
     super.key,
   });
-  
+
   @override
-  State<ImageInclinationEffect> createState() => _ImageInclinationEffectState();
+  State<TriageCard> createState() => _TriageCardState();
 }
 
-class _ImageInclinationEffectState extends State<ImageInclinationEffect> with SingleTickerProviderStateMixin {
-  
+class _TriageCardState extends State<TriageCard>
+    with SingleTickerProviderStateMixin {
   late AnimationController _controller;
-  
+
+  Offset _dragEndPosition = Offset.zero;
   Offset _position = Offset.zero;
-  
+
   final double _maxRotationDegrees = 15;
+
+  /// Deslocamento em que a rotação satura. Não limita a translação: o
+  /// card segue o dedo sem parede, só o ângulo é normalizado.
+  double get _rotationSpan => MediaQuery.sizeOf(context).width * 0.5;
+
+  /// Fração do delta vertical que o card acompanha. Y com o mesmo peso
+  /// do X deixa o card escorregadio e tira a tendência horizontal, que é
+  /// onde estão as duas decisões.
+  static const double _verticalDamping = 0.25;
+  
+  static const double _commitFraction = 0.30;   // 30% da largura
+  static const double _commitVelocity = 700.0;  // px/s 
   
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 300), // Duração do "pulo" de volta
-    );
-    // Ouvinte para atualizar a posição durante a animação de retorno
+    _controller = AnimationController.unbounded(vsync: this);
+    // Sem setState: o AnimatedBuilder do build já escuta o controller e
+    // reconstrói só o Transform.
     _controller.addListener(() {
-      setState(() {
-        // Interpola a posição atual de volta para zero (centro)
-        _position = Offset.lerp(_position, Offset.zero, _controller.value)!;
-      });
+      _position = Offset.lerp(_dragEndPosition, Offset.zero, _controller.value)!;
     });
   }
-  
+
   @override
   void dispose() {
     _controller.dispose();
     super.dispose();
   }
-  
-  double _calculateRotation() {
-    final screenWidth = MediaQuery.of(context).size.width;
-    if (screenWidth == 0) return 0;
 
-    // Normaliza o arrasto X entre -1.0 e 1.0
-    double normalizedX = _position.dx / (screenWidth / 2);
-    
-    // Clampa o valor para garantir que não passe dos limites
-    normalizedX = normalizedX.clamp(-1.0, 1.0);
+  void _runSpringAnimation(Velocity velocity) {
+    _dragEndPosition = _position;
 
-    // Converte a porcentagem de arrasto no ângulo de rotação máximo (em radianos)
-    // Se arrastou para a direita (positivo), inclina para a direita.
-    final rotationRadians = normalizedX * (_maxRotationDegrees * math.pi / 180);
-    
-    return rotationRadians;
+    const spring = SpringDescription(mass: 1, stiffness: 80, damping: 10);
+
+    // `distance` é sempre positivo e perdia o sentido do lançamento: um
+    // flick para fora dava o mesmo overshoot de um flick para dentro.
+    // Projeta a velocidade no eixo do retorno (do ponto solto até o
+    // centro) e normaliza pela distância a percorrer.
+    final travel = _dragEndPosition.distance;
+    final unit = travel == 0
+        ? Offset.zero
+        : Offset(-_dragEndPosition.dx / travel, -_dragEndPosition.dy / travel);
+    final projected = velocity.pixelsPerSecond.dx * unit.dx +
+        velocity.pixelsPerSecond.dy * unit.dy;
+
+    _controller.animateWith(
+      SpringSimulation(spring, 0, 1, travel == 0 ? 0 : projected / travel),
+    );
   }
-    
+  
+  Future<void> _exit(bool toRight) async {
+    _runSpringAnimation(Velocity.zero);
+  }
+  
+  double get _progress =>
+      (_position.dx / _rotationSpan).clamp(-1.0, 1.0);
+
   @override
   Widget build(BuildContext context) {
+    final height = MediaQuery.sizeOf(context).height;
+
     return Center(
       child: GestureDetector(
-        onPanStart: (_) {
-          _controller.stop();
-        },
+        onPanStart: (_) => _controller.stop(),
         onPanUpdate: (details) {
           setState(() {
-            // Adiciona o deslocamento do dedo à posição atual
-            _position += details.delta;
+            _position += Offset(
+              details.delta.dx,
+              details.delta.dy * _verticalDamping,
+            );
           });
         },
-        // 3. QUANDO SOLTA, FAZ O "PÊNDULO" VOLTAR AO CENTRO
-        onPanEnd: (_) {
-          _controller.forward(from: 0); // Inicia a animação de retorno
+        onPanEnd: (details) {
+          final width = MediaQuery.sizeOf(context).width;
+          final vx = details.velocity.pixelsPerSecond.dx;
+
+          final passedDistance = _position.dx.abs() > width * _commitFraction;
+          final passedVelocity = vx.abs() > _commitVelocity;
+
+          if (passedDistance || passedVelocity) {
+            // A velocidade tem prioridade: num flick rápido o dedo sai antes de
+            // percorrer a distância, e o sinal dela é a intenção real.
+            final toRight = passedVelocity ? vx > 0 : _position.dx > 0;
+            debugPrint(toRight ? 'MANTER' : 'EXCLUIR');
+            _exit(toRight);
+          } else {
+            _runSpringAnimation(details.velocity);
+          }
         },
-        child: Transform.rotate(
-          angle: _calculateRotation(),
-          alignment: Alignment.center,
-          child: Transform.translate(
-            offset: _position,
-            child: ImageCard(color: widget.color),
-          )
-        )
-      )
+        child: AnimatedBuilder(
+          animation: _controller,
+          // Fora do builder: a árvore da mídia não reconstrói a cada
+          // frame de mola nem de arrasto, só o Transform.
+          child: MediaCard(color: widget.color),
+          builder: (context, child) {
+            final progress = _progress;
+
+            return Stack(
+              alignment: Alignment.center,
+              children: [
+                if (widget.behind != null)
+                  Transform.scale(
+                    // Cresce conforme o card de cima se afasta: é o que
+                    // vende a sensação de pilha.
+                    scale: 0.92 + 0.08 * progress.abs(),
+                    child: Opacity(opacity: 0.6, child: widget.behind),
+                  ),
+                Transform(
+                  // Matrix4 único, translate antes de rotateZ. Aninhar
+                  // Transform.rotate por fora de Transform.translate
+                  // girava o eixo do arrasto: quanto maior o ângulo, mais
+                  // o movimento horizontal virava diagonal.
+                  transform: Matrix4.identity()
+                    ..translateByDouble(_position.dx, _position.dy, 0, 1)
+                    ..rotateZ(progress * _maxRotationDegrees * math.pi / 180),
+                  // Pivô bem abaixo da tela. Girar na base do próprio
+                  // card produz tombo; o eixo distante produz pêndulo.
+                  origin: Offset(0, height * 0.6),
+                  alignment: Alignment.center,
+                  child: Stack(
+                    fit: StackFit.passthrough,
+                    children: [
+                      child!,
+                      SwipeOverlay(progress: progress),
+                    ],
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
+      ),
     );
   }
 }
-//-------------------------------------------------//27.IMAGE-CARD
-class ImageCard extends StatelessWidget {
+
+//-------------------------------------------------//27.MEDIA-CARD
+class MediaCard extends StatelessWidget {
   final Color color;
   
-  ImageCard({
+  MediaCard({
     required this.color,
     super.key
   });
@@ -1702,6 +1774,8 @@ class ImageCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
+      width: 400,
+      height: 400,
       decoration: BoxDecoration(
         color: color,
         borderRadius: BorderRadius.circular(10),
@@ -1714,4 +1788,58 @@ class ImageCard extends StatelessWidget {
     );
   }
 }
+//-------------------------------------------------//28.SWIPE-OVERLAY
 
+
+/// Lavagem de cor com ícone e rótulo, opacidade proporcional ao
+/// deslocamento. O texto não é decoração: vermelho e verde são o par mais
+/// confundido em deuteranopia, então a direção nunca é comunicada só por
+/// cor.
+class SwipeOverlay extends StatelessWidget {
+  const SwipeOverlay({required this.progress});
+
+  final double progress;
+
+  @override
+  Widget build(BuildContext context) {
+    final opacity = progress.abs();
+    if (opacity <= 0.02) return const SizedBox.shrink();
+
+    final toRight = progress > 0;
+    final color = toRight ? const Color(0xFF4C8DFF) : const Color(0xFFF2554B);
+
+    return Positioned.fill(
+      child: IgnorePointer(
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.34 * opacity),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Center(
+            child: Opacity(
+              opacity: opacity,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    toRight ? Icons.check : Icons.delete_outline,
+                    size: 44,
+                    color: Colors.white,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    toRight ? 'Manter' : 'Excluir',
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleMedium
+                        ?.copyWith(color: Colors.white),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
