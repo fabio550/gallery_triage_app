@@ -67,6 +67,7 @@ class CategoryTile extends StatelessWidget {
                 progressPercent: summary.keptItems / summary.totalItems,
                 progressColor: triageColors.stateKept,
               ) : Icon(Icons.chevron_right, color: colors.onSurfaceVariant),
+            Divider(),
           ],
         ),
       ),
@@ -84,8 +85,8 @@ class _Cover extends StatelessWidget {
     // Placeholder até o provider de miniatura existir. Falha de leitura
     // não impede a linha de funcionar (§7).
     return Container(
-      width: 46,
-      height: 46,
+      width: 72,
+      height: 72,
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surfaceContainerHigh,
         borderRadius: BorderRadius.circular(12),
