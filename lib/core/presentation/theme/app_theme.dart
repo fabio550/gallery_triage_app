@@ -132,34 +132,62 @@ abstract final class AppTheme {
     );
   }
 
+  /// Cada estilo parte do correspondente em [base] para preservar família e
+  /// `height` resolvidos por `Typography`. Sem `apply()`: ele roda depois do
+  /// `copyWith` e sobrescreveria as cores definidas aqui — foi o que apagava
+  /// o cinza de `bodySmall` e `labelSmall`.
   static TextTheme _textTheme(TextTheme base) {
-    return base
-        .copyWith(
-          headlineSmall: const TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.w500,
-            letterSpacing: -0.4,
-          ),
-          titleSmall: const TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w300,
-            letterSpacing: -0.15,
-          ),
-          titleMedium: const TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.w500,
-            letterSpacing: -0.15,
-          ),
-          titleLarge: const TextStyle(
-            fontSize: 26,
-            fontWeight: FontWeight.w500,
-            letterSpacing: -0.15,
-          ),
-          bodySmall: const TextStyle(fontSize: 12, color: _Palette.textMuted),
-          bodyMedium: const TextStyle(fontSize: 16, height: 1.5),
-          bodyLarge: const TextStyle(fontSize: 20, height: 1.5),
-          labelSmall: const TextStyle(fontSize: 11, color: _Palette.textFaint),
-        )
-        .apply(bodyColor: _Palette.text, displayColor: _Palette.text);
+    // Contadores mudam a cada swipe. Com algarismos proporcionais a largura
+    // do número oscila e o texto treme; `tnum` fixa o avanço.
+    const tabular = <FontFeature>[FontFeature.tabularFigures()];
+
+    return base.copyWith(
+      displaySmall: base.displaySmall!.copyWith(
+        fontSize: 28,
+        fontWeight: FontWeight.w300,
+        letterSpacing: -0.8,
+        color: _Palette.text,
+        fontFeatures: tabular,
+      ),
+      headlineSmall: base.headlineSmall!.copyWith(
+        fontSize: 20,
+        fontWeight: FontWeight.w500,
+        letterSpacing: -0.4,
+        color: _Palette.text,
+      ),
+      titleMedium: base.titleMedium!.copyWith(
+        fontSize: 15,
+        fontWeight: FontWeight.w500,
+        letterSpacing: -0.15,
+        color: _Palette.text,
+      ),
+      titleSmall: base.titleSmall!.copyWith(
+        fontSize: 13,
+        fontWeight: FontWeight.w500,
+        letterSpacing: 0,
+        color: _Palette.text,
+      ),
+      bodyMedium: base.bodyMedium!.copyWith(
+        fontSize: 14,
+        height: 1.5,
+        color: _Palette.text,
+      ),
+      bodySmall: base.bodySmall!.copyWith(
+        fontSize: 12,
+        color: _Palette.textMuted,
+        fontFeatures: tabular,
+      ),
+      labelLarge: base.labelLarge!.copyWith(
+        fontSize: 14,
+        fontWeight: FontWeight.w500,
+        color: _Palette.text,
+      ),
+      labelSmall: base.labelSmall!.copyWith(
+        fontSize: 11,
+        letterSpacing: 0,
+        color: _Palette.textFaint,
+        fontFeatures: tabular,
+      ),
+    );
   }
 }
