@@ -1,31 +1,35 @@
-//---1.IMPORTS
+//---1.IMPORTS********************
 //---2.MAIN
 //---3.APP-ROUTER-PROVIDER
 //---4.ROUTES
-//---5.APP-THEME
+//---5.APP-THEME********************
 //---6.TRIAGE-VISUAL-STATE
 //---7.TRIAGE-COLORS
 //---8.TRIAGE-DECISION
-//---9.PROGRESS-BAR
+//---9.PROGRESS-BAR********************
 //---10.PROGRESS-CIRCULAR
 //---11.PROGRESS-CIRCLE-PAINTER
 //---12.MEDIA-ITEM-ENTITY
 //---13.CATEGORY-GRANULARITY
 //---14.CATEGORY-SUMMARY
-//---15.CATEGORY-LIST
-//---16.CATEGORY-TILE
+//---15.CATEGORY-LIST********************
+//---16.CATEGORY-TILE********************
 //---17.GRANULARITY-PICKER-SHEET
 //---18.GRANULARITY-SELECTOR
-//---19.INFO-STATS-CARD
+//---19.INFO-STATS-CARD********************
 //---20.TOTAL-ITEMS-INFO
-//---21.DASHBOARD-PAGE
+//---21.DASHBOARD-PAGE********************
 //---22.MOCK-CATEGORIES
-//---23.TRIAGE-PAGE
-
+//---23.TRIAGE-PAGE********************
+//---24.IMAGE-SELECTOR********************
+//---25.MINI-IMAGE-CARD********************
+//---26.IMAGE-INCLINATION-EFFECT********************
+//---27.IMAGE-CARD********************
 //--------------------------------------------------//1.IMPORTS
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'dart:math' as math;
 //-------------------------------------------------//2.MAIN
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -71,6 +75,7 @@ final routes = [
   ),
 ];
 //-------------------------------------------------//5.APP-THEME
+
 /// Paleta base do app. Estes valores são candidatos a migrar para o pacote
 /// `design_system` — são neutros e servem a qualquer um dos três projetos.
 /// As cores de estado ficam fora daqui, em [TriageColors].
@@ -202,35 +207,63 @@ abstract final class AppTheme {
     );
   }
 
+  /// Cada estilo parte do correspondente em [base] para preservar família e
+  /// `height` resolvidos por `Typography`. Sem `apply()`: ele roda depois do
+  /// `copyWith` e sobrescreveria as cores definidas aqui — foi o que apagava
+  /// o cinza de `bodySmall` e `labelSmall`.
   static TextTheme _textTheme(TextTheme base) {
-    return base
-      .copyWith(
-        headlineSmall: const TextStyle(
-          fontSize: 20,
-          fontWeight: FontWeight.w500,
-          letterSpacing: -0.4,
-        ),
-        titleSmall: const TextStyle(
-          fontSize: 12,
-          fontWeight: FontWeight.w300,
-          letterSpacing: -0.15,
-        ),
-        titleMedium: const TextStyle(
-          fontSize: 18,
-          fontWeight: FontWeight.w500,
-          letterSpacing: -0.15,
-        ),
-        titleLarge: const TextStyle(
-          fontSize: 26,
-          fontWeight: FontWeight.w500,
-          letterSpacing: -0.15,
-        ),
-        bodySmall: const TextStyle(fontSize: 12, color: _Palette.textMuted),
-        bodyMedium: const TextStyle(fontSize: 16, height: 1.5),
-        bodyLarge: const TextStyle(fontSize: 20, height: 1.5),
-        labelSmall: const TextStyle(fontSize: 11, color: _Palette.textFaint),
-      )
-      .apply(bodyColor: _Palette.text, displayColor: _Palette.text);
+    // Contadores mudam a cada swipe. Com algarismos proporcionais a largura
+    // do número oscila e o texto treme; `tnum` fixa o avanço.
+    const tabular = <FontFeature>[FontFeature.tabularFigures()];
+
+    return base.copyWith(
+      displaySmall: base.displaySmall!.copyWith(
+        fontSize: 28,
+        fontWeight: FontWeight.w300,
+        letterSpacing: -0.8,
+        color: _Palette.text,
+        fontFeatures: tabular,
+      ),
+      headlineSmall: base.headlineSmall!.copyWith(
+        fontSize: 20,
+        fontWeight: FontWeight.w500,
+        letterSpacing: -0.4,
+        color: _Palette.text,
+      ),
+      titleMedium: base.titleMedium!.copyWith(
+        fontSize: 15,
+        fontWeight: FontWeight.w500,
+        letterSpacing: -0.15,
+        color: _Palette.text,
+      ),
+      titleSmall: base.titleSmall!.copyWith(
+        fontSize: 13,
+        fontWeight: FontWeight.w500,
+        letterSpacing: 0,
+        color: _Palette.text,
+      ),
+      bodyMedium: base.bodyMedium!.copyWith(
+        fontSize: 14,
+        height: 1.5,
+        color: _Palette.text,
+      ),
+      bodySmall: base.bodySmall!.copyWith(
+        fontSize: 12,
+        color: _Palette.textMuted,
+        fontFeatures: tabular,
+      ),
+      labelLarge: base.labelLarge!.copyWith(
+        fontSize: 14,
+        fontWeight: FontWeight.w500,
+        color: _Palette.text,
+      ),
+      labelSmall: base.labelSmall!.copyWith(
+        fontSize: 11,
+        letterSpacing: 0,
+        color: _Palette.textFaint,
+        fontFeatures: tabular,
+      ),
+    );
   }
 }
 //-------------------------------------------------//6.TRIAGE-VISUAL-STATE
@@ -356,61 +389,62 @@ class ProgressBar extends StatelessWidget {
   final classifiedPercent = classifiedItems / total;
   final keptPercent = keptItems / total;
 
-    return SizedBox(
-      width: 160,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Stack(
-            children: [
-              LinearProgressIndicator(
-                value: 1,
-                backgroundColor: Colors.transparent,
-                valueColor: AlwaysStoppedAnimation<Color>(
-                  color.outline,
-                ),
-                minHeight: 8,
-                borderRadius: BorderRadius.circular(4),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Stack(
+          children: [
+            LinearProgressIndicator(
+              value: 1,
+              backgroundColor: Colors.transparent,
+              valueColor: AlwaysStoppedAnimation<Color>(
+                color.outline,
               ),
-              LinearProgressIndicator(
-                value: keptPercent.clamp(0.0, 1.0),                
-                backgroundColor: Colors.transparent,
-                valueColor: AlwaysStoppedAnimation<Color>(
-                  triageColors.stateKept,
-                ),
-                minHeight: 8,
-                borderRadius: BorderRadius.circular(4),
+              minHeight: 8,
+              borderRadius: BorderRadius.circular(4),
+            ),
+            LinearProgressIndicator(
+              value: keptPercent.clamp(0.0, 1.0),                
+              backgroundColor: Colors.transparent,
+              valueColor: AlwaysStoppedAnimation<Color>(
+                triageColors.stateKept,
               ),
-              LinearProgressIndicator(
-                value: classifiedPercent.clamp(0.0, 1.0),                
-                backgroundColor: Colors.transparent,
-                valueColor: AlwaysStoppedAnimation<Color>(
-                  triageColors.stateClassified,
-                ),
-                minHeight: 8,
-                borderRadius: BorderRadius.circular(4),
+              minHeight: 8,
+              borderRadius: BorderRadius.circular(4),
+            ),
+            LinearProgressIndicator(
+              value: classifiedPercent.clamp(0.0, 1.0),                
+              backgroundColor: Colors.transparent,
+              valueColor: AlwaysStoppedAnimation<Color>(
+                triageColors.stateClassified,
               ),
-            ],
-          ),
-          SizedBox(height: 12,),
-          showLegend ? Column(children:
-          [
+              minHeight: 8,
+              borderRadius: BorderRadius.circular(4),
+            ),
+          ],
+        ),
+        SizedBox(height: 12,),
+        !showLegend ? SizedBox() : 
+        Wrap(
+          spacing: 12,
+          runSpacing: 4,
+          children: [
             Text.rich(
               TextSpan(
                 text: '●',
-                style: text.titleMedium?.copyWith(
+                style: text.labelSmall?.copyWith(
                   color: triageColors.stateClassified,
                 ),
                 children: [
                   TextSpan(
                     text: ' Classificados - ',
-                    style: text.titleSmall?.copyWith(
+                    style: text.labelSmall?.copyWith(
                       color: color.onSurfaceVariant,
                     ),
                   ),
                   TextSpan(
                     text: '$classifiedItems',
-                    style: text.titleSmall?.copyWith(
+                    style: text.labelSmall?.copyWith(
                       color: color.onSurfaceVariant,
                     ),
                   ),
@@ -420,28 +454,50 @@ class ProgressBar extends StatelessWidget {
             Text.rich(
               TextSpan(
                 text: '●',
-                style: text.titleMedium?.copyWith(
+                style: text.labelSmall?.copyWith(
                   color: triageColors.stateKept,
                 ),
                 children: [
                   TextSpan(
                     text: ' Mantidos - ',
-                    style: text.titleSmall?.copyWith(
+                    style: text.labelSmall?.copyWith(
                       color: color.onSurfaceVariant,
                     ),
                   ),
                   TextSpan(
                     text: '$keptItems',
-                    style: text.titleSmall?.copyWith(
+                    style: text.labelSmall?.copyWith(
                       color: color.onSurfaceVariant,
                     ),
                   ),
                 ],
               ),
             ),
-          ]) : SizedBox(),
-        ],
-      ),
+            Text.rich(
+              TextSpan(
+                text: '●',
+                style: text.labelSmall?.copyWith(
+                  color: color.outline,
+                ),
+                children: [
+                  TextSpan(
+                    text: ' Não decididos - ',
+                    style: text.labelSmall?.copyWith(
+                      color: color.onSurfaceVariant,
+                    ),
+                  ),
+                  TextSpan(
+                    text: '${total - keptItems}',
+                    style: text.labelSmall?.copyWith(
+                      color: color.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ],
     );
   }
 }
@@ -864,7 +920,7 @@ class CategoryList extends StatelessWidget {
     @override
   Widget build(BuildContext context) {
     
-      if (categories.isEmpty) return const _EmptyGallery();
+    if (categories.isEmpty) return const _EmptyGallery();
 
     final isAlbum = granularity == CategoryGranularity.album;
 
@@ -873,15 +929,15 @@ class CategoryList extends StatelessWidget {
       itemCount: categories.length,
       itemBuilder: (context, index) {
         final summary = categories[index];
-        return isAlbum
-          ? CategoryTile.album(
-              summary: summary,
-              onTap: () => context.push('/triage-page', extra: categories[index])
-            )
-          : CategoryTile(
-              summary: summary,
-              onTap: () => context.push('/triage-page', extra: categories[index])
-            );
+        return isAlbum ?
+          CategoryTile.album(
+            summary: summary,
+            onTap: () => context.push('/triage-page', extra: categories[index])
+          ) :
+          CategoryTile(
+            summary: summary,
+            onTap: () => context.push('/triage-page', extra: categories[index])
+          );
       },
     );
   }
@@ -932,7 +988,7 @@ class CategoryTile extends StatelessWidget {
     return InkWell(
       onTap: onTap,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
         child: Row(
           children: [
             _Cover(itemId: summary.coverItemId),
@@ -950,12 +1006,15 @@ class CategoryTile extends StatelessWidget {
                   ),
                   if (_showMetrics) ...[
                     const SizedBox(height: 7),
-                    ProgressBar(
-                      showLegend: false,
-                      totalItems: summary.totalItems,
-                      classifiedItems: summary.classifiedItems,
-                      keptItems: summary.keptItems,
-                    ),
+                    Padding(
+                      padding: EdgeInsetsGeometry.only(right: 16),
+                      child: ProgressBar(
+                        showLegend: false,
+                        totalItems: summary.totalItems,
+                        classifiedItems: summary.classifiedItems,
+                        keptItems: summary.keptItems,
+                      ),
+                    )
                   ] else
                     const SizedBox(height: 3),
                   Text(summary.countLabel, style: text.titleSmall),
@@ -1128,51 +1187,50 @@ class InfoStatsCard extends StatelessWidget {
     final classifiedIPercent = classifiedItems / totalItems;
     final keptPercent = keptItems / totalItems;
 
-    return Center(
-      child: SizedBox(
-        width: MediaQuery.of(context).size.width-50,
-        child: Card(
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    TotalItemsInfo(
-                      totalItems: totalItems,
-                      totalSizeGb: totalSizeGb,
-                    ),
-                    SizedBox(height: 8,),
-                    ProgressBar(
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  TotalItemsInfo(
+                    totalItems: totalItems,
+                    totalSizeGb: totalSizeGb,
+                  ),
+                  SizedBox(height: 8,),
+                  Padding(
+                    padding: EdgeInsetsGeometry.only(right: 16),
+                    child: ProgressBar(
                       totalItems: totalItems,
                       classifiedItems: classifiedItems,
                       keptItems: keptItems,
                     ),
-                  ],
-                ),
-                SizedBox(width: 20,),
-                Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    ProgressCircular(
-                      context: context,
-                      progressPercent: classifiedIPercent,
-                      progressColor: triageColors.stateClassified,
-                    ),
-                    SizedBox(height: 20,),
-                    ProgressCircular(
-                      context: context,
-                      progressPercent: keptPercent,
-                      progressColor: triageColors.stateKept,
-                    ),
-                  ],
-                )
-              ],
+                  ),
+                ],
+              ),
             ),
-          ),
+            SizedBox(width: 20,),
+            Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                ProgressCircular(
+                  context: context,
+                  progressPercent: classifiedIPercent,
+                  progressColor: triageColors.stateClassified,
+                ),
+                SizedBox(height: 20,),
+                ProgressCircular(
+                  context: context,
+                  progressPercent: keptPercent,
+                  progressColor: triageColors.stateKept,
+                ),
+              ],
+            )
+          ],
         ),
       ),
     );
@@ -1270,10 +1328,13 @@ class _DashboardPageState extends State<DashboardPage> {
           ),
           const SizedBox(height: 8),
           Expanded(
-            child: CategoryList(
-              categories: categories,
-              granularity: _granularity,
-              onCategoryTap: (summary) => debugPrint(summary.ref.key),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: CategoryList(
+                categories: categories,
+                granularity: _granularity,
+                onCategoryTap: (summary) => debugPrint(summary.ref.key),
+              ),
             ),
           ),
         ],
@@ -1389,13 +1450,268 @@ class TriagePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    
+    final text = Theme.of(context).textTheme;
+    final List<Color> items = [
+      Colors.green,
+      Colors.red,
+      Colors.orange,
+      Colors.amber,
+      Colors.blueGrey,
+      Colors.indigo,
+      Colors.green,
+      Colors.red,
+      Colors.orange,
+      Colors.amber,
+      Colors.blueGrey,
+      Colors.indigo,
+    ];
+
+    
     return Scaffold(
       appBar: AppBar(
-        title: Text(category.label),
+        title: Column(
+          children: [
+            Text(category.label),
+            Text(
+              'Item X de ${category.totalItems}',
+              style: text.bodySmall,
+            ),
+          ]
+        ),
       ),
-      body: Center(
-        child: Text('data')
+      body: Column(
+        children: [
+          Padding(
+            padding: EdgeInsetsGeometry.symmetric(horizontal: 40),
+              child: ProgressBar(
+              showLegend: true,
+              totalItems: category.totalItems,
+              classifiedItems: category.classifiedItems,
+              keptItems: category.keptItems,
+            ),
+          ),
+          ImageSelector(items: items),
+        ]
       ),
     );
   }
 }
+
+//-------------------------------------------------//24.IMAGE-SELECTOR
+class ImageSelector extends StatefulWidget {
+  final List<Color> items;
+    
+  ImageSelector({
+    required this.items,
+    super.key
+  });
+
+  @override
+  State<ImageSelector> createState() => _ImageSelectorState();
+}
+
+class _ImageSelectorState extends State<ImageSelector> {
+  int selectedIndex = 1; // Índice selecionado por padrão
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        SizedBox(
+          height: 90,
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            itemCount: widget.items.length,
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            itemBuilder: (context, index) {
+              return MiniImageCard(
+                index: index,
+                isSelected: selectedIndex == index,
+                color: widget.items[index],
+                onTap: () {
+                  setState(() {
+                    selectedIndex = index;
+                  });
+                },
+              );
+            },
+          ),
+        ),
+        Padding(
+          padding: EdgeInsetsGeometry.symmetric(
+            horizontal: 16, vertical: 20,
+          ),
+          child: SizedBox(
+            height: 500,
+            child: ImageCard(
+              color: widget.items[selectedIndex],
+            ),
+          ),
+        ),
+      ]
+    );
+  }
+}
+
+//-------------------------------------------------//25.MINI-IMAGE-CARD
+class MiniImageCard extends StatelessWidget {
+  final int index;
+  final bool isSelected;
+  final Color color;
+  final VoidCallback onTap;
+  
+  const MiniImageCard({
+    required this.index,
+    required this.isSelected,
+    required this.color,
+    required this.onTap,
+    super.key,
+  });
+  
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeOut,
+        width: 90,
+        height: 90,
+        margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+        decoration: BoxDecoration(
+          color: color,
+          borderRadius: BorderRadius.circular(10),
+          border: isSelected
+              ? Border.all(color: Colors.white, width: 3)
+              : null,
+          boxShadow: isSelected
+            ? [
+                BoxShadow(
+                  color: Colors.black.withValues(),
+                  blurRadius: 8,
+                  offset: const Offset(0, 4),
+                )
+              ]
+            : [],
+        ),
+      ),
+    );
+  }
+}
+//-------------------------------------------------//26.IMAGE-INCLINATION-EFFECT
+
+class ImageInclinationEffect extends StatefulWidget {
+  final Color color;
+  
+  const ImageInclinationEffect({
+    required this.color,
+    super.key,
+  });
+  
+  @override
+  State<ImageInclinationEffect> createState() => _ImageInclinationEffectState();
+}
+
+class _ImageInclinationEffectState extends State<ImageInclinationEffect> with SingleTickerProviderStateMixin {
+  
+  late AnimationController _controller;
+  
+  Offset _position = Offset.zero;
+  
+  final double _maxRotationDegrees = 15;
+  
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 300), // Duração do "pulo" de volta
+    );
+    // Ouvinte para atualizar a posição durante a animação de retorno
+    _controller.addListener(() {
+      setState(() {
+        // Interpola a posição atual de volta para zero (centro)
+        _position = Offset.lerp(_position, Offset.zero, _controller.value)!;
+      });
+    });
+  }
+  
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+  
+  double _calculateRotation() {
+    final screenWidth = MediaQuery.of(context).size.width;
+    if (screenWidth == 0) return 0;
+
+    // Normaliza o arrasto X entre -1.0 e 1.0
+    double normalizedX = _position.dx / (screenWidth / 2);
+    
+    // Clampa o valor para garantir que não passe dos limites
+    normalizedX = normalizedX.clamp(-1.0, 1.0);
+
+    // Converte a porcentagem de arrasto no ângulo de rotação máximo (em radianos)
+    // Se arrastou para a direita (positivo), inclina para a direita.
+    final rotationRadians = normalizedX * (_maxRotationDegrees * math.pi / 180);
+    
+    return rotationRadians;
+  }
+    
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: GestureDetector(
+        onPanStart: (_) {
+          _controller.stop();
+        },
+        onPanUpdate: (details) {
+          setState(() {
+            // Adiciona o deslocamento do dedo à posição atual
+            _position += details.delta;
+          });
+        },
+        // 3. QUANDO SOLTA, FAZ O "PÊNDULO" VOLTAR AO CENTRO
+        onPanEnd: (_) {
+          _controller.forward(from: 0); // Inicia a animação de retorno
+        },
+        child: Transform.rotate(
+          angle: _calculateRotation(),
+          alignment: Alignment.center,
+          child: Transform.translate(
+            offset: _position,
+            child: ImageCard(color: widget.color),
+          )
+        )
+      )
+    );
+  }
+}
+//-------------------------------------------------//27.IMAGE-CARD
+class ImageCard extends StatelessWidget {
+  final Color color;
+  
+  ImageCard({
+    required this.color,
+    super.key
+  });
+  
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(10),
+        boxShadow: [BoxShadow(
+          color: Colors.black.withValues(),
+          blurRadius: 8,
+          offset: const Offset(0, 4),
+        )],
+      ),
+    );
+  }
+}
+
