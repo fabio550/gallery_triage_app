@@ -1,7 +1,9 @@
+import 'package:flutter/material.dart';
+
 class MediaCard extends StatelessWidget {
   final Color color;
   
-  MediaCard({
+  const MediaCard({
     required this.color,
     super.key
   });

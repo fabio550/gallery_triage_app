@@ -1442,126 +1442,163 @@ abstract final class MockCategories {
   ];
 }
 //-------------------------------------------------//23.TRIAGE-PAGE
-class TriagePage extends StatelessWidget {
+
+class TriagePage extends StatefulWidget {
+  const TriagePage({required this.category, super.key});
+
   final CategorySummary category;
-  
-  const TriagePage({
-    required this.category,
-    super.key
-  });
+
+  @override
+  State<TriagePage> createState() => _TriagePageState();
+}
+
+class _TriagePageState extends State<TriagePage> {
+
+  final List<Color> _items = const [
+    Colors.green,
+    Colors.red,
+    Colors.orange,
+    Colors.amber,
+    Colors.blueGrey,
+    Colors.indigo,
+    Colors.teal,
+    Colors.purple,
+    Colors.brown,
+    Colors.cyan,
+  ];
+
+  late int _currentIndex = _resolveInitialIndex();
+
+  int _resolveInitialIndex() => 0; // TODO: 6.2.4
+
+  bool get _hasNext => _currentIndex < _items.length - 1;
+
+  void _advance() {
+    if (_hasNext) setState(() => _currentIndex++);
+    // TODO: §7 — fim da fila da categoria quando não há próximo.
+  }
+
+  // --- Decisões (3.4) -----------------------------------------------------
+  // Swipe e botão chamam o mesmo método de propósito: são caminhos
+  // equivalentes, e lambdas duplicadas divergiriam no primeiro ajuste.
+
+  void _markForDeletion() {
+    debugPrint('EXCLUIR item $_currentIndex');
+    // TODO: gravar UndoEntry com âncora (6.2.15) e incrementar o badge.
+    _advance();
+  }
+
+  void _keep() {
+    debugPrint('MANTER item $_currentIndex');
+    _advance();
+  }
+
+  /// Não altera decisão nem classificação. Apenas move o cursor (3.2.6).
+  void _skip() => _advance();
+
+  /// Toque no carrossel. Não entra na pilha de desfazer (6.2.14), mas
+  /// define a âncora da próxima ação (6.2.15).
+  void _jumpTo(int index) {
+    setState(() => _currentIndex = index);
+  }
 
   @override
   Widget build(BuildContext context) {
-    
     final text = Theme.of(context).textTheme;
-    final List<Color> items = [
-      Colors.green,
-      Colors.red,
-      Colors.orange,
-      Colors.amber,
-      Colors.blueGrey,
-      Colors.indigo,
-      Colors.green,
-      Colors.red,
-      Colors.orange,
-      Colors.amber,
-      Colors.blueGrey,
-      Colors.indigo,
-    ];
+    final category = widget.category;
 
-    
     return Scaffold(
       appBar: AppBar(
         title: Column(
           children: [
             Text(category.label),
             Text(
-              'Item X de ${category.totalItems}',
+              'Item ${_currentIndex + 1} de ${category.totalItems}',
               style: text.bodySmall,
             ),
-          ]
+          ],
         ),
       ),
       body: Column(
         children: [
           Padding(
-            padding: EdgeInsetsGeometry.symmetric(horizontal: 40),
-              child: ProgressBar(
+            padding: const EdgeInsets.symmetric(horizontal: 40),
+            child: ProgressBar(
               showLegend: true,
               totalItems: category.totalItems,
               classifiedItems: category.classifiedItems,
               keptItems: category.keptItems,
             ),
           ),
+          TriageCarousel(
+            items: _items,
+            currentIndex: _currentIndex,
+            onThumbTap: _jumpTo,
+          ),
           Expanded(
-            child: TriageCarousel(items: items),
-          )
-        ]
+            child: TriageCard(
+              // Key por item: sem ela o State do card sobrevive à troca e
+              // o próximo entra deslocado, onde o anterior saiu.
+              key: ValueKey(_currentIndex),
+              item: _items[_currentIndex],
+              behind: _hasNext ? MediaCard(color: _items[_currentIndex + 1]) : null,
+              onSwipeLeft: _markForDeletion,
+              onSwipeRight: _keep,
+            ),
+          ),
+          // TODO: TriageActionBar(onDelete:, onSkip:, onKeep:) — 6.2.12.
+          // Enquanto não existe, _skip fica sem chamador.
+        ],
       ),
     );
   }
 }
-
 //-------------------------------------------------//24.TRIAGE-CAROUSEL
-class TriageCarousel extends StatefulWidget {
+
+class TriageCarousel extends StatelessWidget {
   final List<Color> items;
-    
+  final int currentIndex;
+  final ValueChanged<int> onThumbTap;
+
   const TriageCarousel({
     required this.items,
-    super.key
+    required this.currentIndex,
+    required this.onThumbTap,
+    super.key,
   });
 
-  @override
-  State<TriageCarousel> createState() => _TriageCarouselState();
-}
-
-class _TriageCarouselState extends State<TriageCarousel> {
-  int selectedIndex = 1; // Índice selecionado por padrão
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        SizedBox(
-          height: 90,
-          child: ListView.builder(
-            scrollDirection: Axis.horizontal,
-            itemCount: widget.items.length,
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            itemBuilder: (context, index) {
-              return CarouselThumb(
-                index: index,
-                isSelected: selectedIndex == index,
-                color: widget.items[index],
-                onTap: () {
-                  setState(() {
-                    selectedIndex = index;
-                  });
-                },
-              );
-            },
-          ),
-        ),
-        Expanded(
-          child: TriageCard(
-            color: widget.items[selectedIndex],
-          ),
-        ),
-      ]
+    return SizedBox(
+      height: 90,
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        itemCount: items.length,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        itemBuilder: (context, index) {
+          return CarouselThumb(
+            color: items[index],
+            index: currentIndex,
+            isActive: index == currentIndex,
+            onTap: () => onThumbTap(index),
+          );
+        },
+      ),
     );
   }
 }
-
 //-------------------------------------------------//25.CAROUSEL-THUMB
+
 class CarouselThumb extends StatelessWidget {
   final int index;
-  final bool isSelected;
+  final bool isActive;
   final Color color;
   final VoidCallback onTap;
   
   const CarouselThumb({
     required this.index,
-    required this.isSelected,
+    required this.isActive,
     required this.color,
     required this.onTap,
     super.key,
@@ -1581,10 +1618,10 @@ class CarouselThumb extends StatelessWidget {
         decoration: BoxDecoration(
           color: color,
           borderRadius: BorderRadius.circular(10),
-          border: isSelected
+          border: isActive
               ? Border.all(color: Colors.white, width: 3)
               : null,
-          boxShadow: isSelected
+          boxShadow: isActive
             ? [
                 BoxShadow(
                   color: Colors.black.withValues(),
@@ -1598,17 +1635,22 @@ class CarouselThumb extends StatelessWidget {
     );
   }
 }
+
 //-------------------------------------------------//26.TRIAGE-CARD
 
 class TriageCard extends StatefulWidget {
-  final Color color;
+  final Color item;
+  final VoidCallback onSwipeLeft;
+  final VoidCallback onSwipeRight;
 
   /// Card de baixo da pilha. Opcional: sem ele o efeito continua, só
   /// perde a sensação de profundidade.
   final Widget? behind;
 
   const TriageCard({
-    required this.color,
+    required this.item,
+    required this.onSwipeLeft,
+    required this.onSwipeRight,
     this.behind,
     super.key,
   });
@@ -1678,6 +1720,7 @@ class _TriageCardState extends State<TriageCard>
   
   Future<void> _exit(bool toRight) async {
     _runSpringAnimation(Velocity.zero);
+    (toRight ? widget.onSwipeRight : widget.onSwipeLeft)();
   }
   
   double get _progress =>
@@ -1709,7 +1752,6 @@ class _TriageCardState extends State<TriageCard>
             // A velocidade tem prioridade: num flick rápido o dedo sai antes de
             // percorrer a distância, e o sinal dela é a intenção real.
             final toRight = passedVelocity ? vx > 0 : _position.dx > 0;
-            debugPrint(toRight ? 'MANTER' : 'EXCLUIR');
             _exit(toRight);
           } else {
             _runSpringAnimation(details.velocity);
@@ -1719,7 +1761,7 @@ class _TriageCardState extends State<TriageCard>
           animation: _controller,
           // Fora do builder: a árvore da mídia não reconstrói a cada
           // frame de mola nem de arrasto, só o Transform.
-          child: MediaCard(color: widget.color),
+          child: MediaCard(color: widget.item),
           builder: (context, child) {
             final progress = _progress;
 
@@ -1795,8 +1837,12 @@ class MediaCard extends StatelessWidget {
 /// deslocamento. O texto não é decoração: vermelho e verde são o par mais
 /// confundido em deuteranopia, então a direção nunca é comunicada só por
 /// cor.
+
 class SwipeOverlay extends StatelessWidget {
-  const SwipeOverlay({required this.progress});
+  const SwipeOverlay({
+    required this.progress,
+    super.key,
+  });
 
   final double progress;
 

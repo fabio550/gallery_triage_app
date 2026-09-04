@@ -1,10 +1,15 @@
 
+import 'package:flutter/material.dart';
+
 /// Lavagem de cor com ícone e rótulo, opacidade proporcional ao
 /// deslocamento. O texto não é decoração: vermelho e verde são o par mais
 /// confundido em deuteranopia, então a direção nunca é comunicada só por
 /// cor.
 class SwipeOverlay extends StatelessWidget {
-  const SwipeOverlay({required this.progress});
+  const SwipeOverlay({
+    required this.progress,
+    super.key,
+  });
 
   final double progress;
 

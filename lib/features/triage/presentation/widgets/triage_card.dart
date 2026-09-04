@@ -1,12 +1,23 @@
+import 'dart:math' as math;
+
+import 'package:flutter/material.dart';
+import 'package:flutter/physics.dart';
+import 'package:gallery_triage_app/features/triage/presentation/widgets/media_card.dart';
+import 'package:gallery_triage_app/features/triage/presentation/widgets/swipe_overlay.dart';
+
 class TriageCard extends StatefulWidget {
-  final Color color;
+  final Color item;
+  final VoidCallback onSwipeLeft;
+  final VoidCallback onSwipeRight;
 
   /// Card de baixo da pilha. Opcional: sem ele o efeito continua, só
   /// perde a sensação de profundidade.
   final Widget? behind;
 
   const TriageCard({
-    required this.color,
+    required this.item,
+    required this.onSwipeLeft,
+    required this.onSwipeRight,
     this.behind,
     super.key,
   });
@@ -76,6 +87,7 @@ class _TriageCardState extends State<TriageCard>
   
   Future<void> _exit(bool toRight) async {
     _runSpringAnimation(Velocity.zero);
+    (toRight ? widget.onSwipeRight : widget.onSwipeLeft)();
   }
   
   double get _progress =>
@@ -107,7 +119,6 @@ class _TriageCardState extends State<TriageCard>
             // A velocidade tem prioridade: num flick rápido o dedo sai antes de
             // percorrer a distância, e o sinal dela é a intenção real.
             final toRight = passedVelocity ? vx > 0 : _position.dx > 0;
-            debugPrint(toRight ? 'MANTER' : 'EXCLUIR');
             _exit(toRight);
           } else {
             _runSpringAnimation(details.velocity);
@@ -117,7 +128,7 @@ class _TriageCardState extends State<TriageCard>
           animation: _controller,
           // Fora do builder: a árvore da mídia não reconstrói a cada
           // frame de mola nem de arrasto, só o Transform.
-          child: MediaCard(color: widget.color),
+          child: MediaCard(color: widget.item),
           builder: (context, child) {
             final progress = _progress;
 

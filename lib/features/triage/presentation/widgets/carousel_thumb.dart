@@ -1,12 +1,14 @@
+import 'package:flutter/material.dart';
+
 class CarouselThumb extends StatelessWidget {
   final int index;
-  final bool isSelected;
+  final bool isActive;
   final Color color;
   final VoidCallback onTap;
   
   const CarouselThumb({
     required this.index,
-    required this.isSelected,
+    required this.isActive,
     required this.color,
     required this.onTap,
     super.key,
@@ -26,10 +28,10 @@ class CarouselThumb extends StatelessWidget {
         decoration: BoxDecoration(
           color: color,
           borderRadius: BorderRadius.circular(10),
-          border: isSelected
+          border: isActive
               ? Border.all(color: Colors.white, width: 3)
               : null,
-          boxShadow: isSelected
+          boxShadow: isActive
             ? [
                 BoxShadow(
                   color: Colors.black.withValues(),
