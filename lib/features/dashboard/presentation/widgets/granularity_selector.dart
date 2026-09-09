@@ -26,7 +26,7 @@ class GranularitySelector extends StatelessWidget {
     final text = Theme.of(context).textTheme;
 
     return SizedBox(
-      width: MediaQuery.of(context).size.width-50,
+      width: double.infinity,
       child: Card(
         clipBehavior: Clip.antiAlias,
         shape: RoundedRectangleBorder(
