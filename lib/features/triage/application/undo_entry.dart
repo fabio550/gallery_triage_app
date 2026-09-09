@@ -1,17 +1,17 @@
 import 'package:gallery_triage_app/core/domain/enums/triage_decision.dart';
 
-/// Uma entrada da pilha de desfazer (6.2.15).
+/// Uma entrada da pilha de desfazer.
 ///
-/// `anchorPosition` é a posição para a qual o cursor deve voltar ao
-/// desfazer — não é necessariamente a posição do item, e não é sempre
-/// "a posição anterior" no sentido aritmético. Duas regras (6.2.15):
-///
-/// - Ação sobre item alcançado por avanço sequencial: âncora = posição
-///   imediatamente anterior no percurso.
-/// - Primeira ação após um salto pelo carrossel: âncora = posição de
-///   origem do salto.
-/// - Ação que não avança o cursor (desclassificar, 3.2.4): âncora = a
-///   própria posição atual, já que não há posição anterior a restaurar.
+/// `anchorPosition` é a posição do próprio item de origem da ação —
+/// não uma "posição anterior". Ao desfazer, o cursor volta exatamente
+/// para onde a ação aconteceu, independente de o item ter sido
+/// alcançado por avanço sequencial ou salto pelo carrossel. (Revisão
+/// de 6.2.15: o texto original distinguia os dois casos com âncoras
+/// diferentes; simplificado para uma regra única após teste real
+/// mostrar que voltar para uma posição anterior ao item revertido,
+/// como o texto original pedia, não fazia sentido para quem está
+/// desfazendo — a ação que motivou o desfazer foi a mais recente, e o
+/// usuário espera vê-la, não pular por cima dela.)
 class UndoEntry {
   const UndoEntry({
     required this.itemId,
