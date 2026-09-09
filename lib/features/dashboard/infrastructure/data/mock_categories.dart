@@ -1,99 +1,165 @@
+import 'package:gallery_triage_app/core/domain/entities/media_item_entity.dart';
 import 'package:gallery_triage_app/core/domain/enums/category_granularity.dart';
+import 'package:gallery_triage_app/core/domain/enums/triage_decision.dart';
 import 'package:gallery_triage_app/core/domain/models/category_summary.dart';
+import 'package:gallery_triage_app/core/infrastructure/mock/mock_media_items.dart';
 
+const _monthNames = [
+  '',
+  'Janeiro',
+  'Fevereiro',
+  'Março',
+  'Abril',
+  'Maio',
+  'Junho',
+  'Julho',
+  'Agosto',
+  'Setembro',
+  'Outubro',
+  'Novembro',
+  'Dezembro',
+];
+
+/// Deriva [CategorySummary] a partir de [MockMediaItems.all]. Nenhum
+/// total é digitado — é a mesma garantia que o `TriageRepository` real
+/// (2.4.2) vai dar via `COUNT` indexado (8.3).
 abstract final class MockCategories {
   static List<CategorySummary> of(CategoryGranularity granularity) {
     return switch (granularity) {
-      CategoryGranularity.all => _all,
-      CategoryGranularity.month => _months,
-      CategoryGranularity.year => _years,
-      CategoryGranularity.type => _types,
-      CategoryGranularity.album => _albums,
+      CategoryGranularity.all => _all(),
+      CategoryGranularity.month => _months(),
+      CategoryGranularity.year => _years(),
+      CategoryGranularity.type => _types(),
+      CategoryGranularity.album => _albums(),
     };
   }
 
-  static CategorySummary _make(
-    CategoryGranularity granularity,
-    String key,
-    String label,
-    int total,
-    int kept,
-    int classified,
-    int sizeMb,
-  ) {
-    return CategorySummary(
-      ref: CategoryRef(granularity: granularity, key: key),
-      label: label,
-      totalItems: total,
-      keptItems: kept,
-      classifiedItems: classified,
-      sizeBytes: sizeMb * 1024 * 1024,
+  static List<CategorySummary> _all() {
+    final summary = _summarize(
+      CategoryRef(granularity: CategoryGranularity.all, key: 'all'),
+      'Todos os itens',
+      MockMediaItems.all,
     );
+    return summary == null ? const [] : [summary];
   }
 
-  static final _all = [
-    _make(CategoryGranularity.all, 'all', 'Todos os itens',
-        62418, 27310, 18902, 22220),
-  ];
+  static List<CategorySummary> _months() {
+    final keys = MockMediaItems.all
+        .map((i) => MockMediaItems.monthKey(i.dateTaken))
+        .toSet()
+        .toList()
+      ..sort((a, b) => b.compareTo(a)); // 6.1.8: temporal decrescente.
 
-  static final _months = [
-    // Recém-triado: quase tudo classificado.
-    _make(CategoryGranularity.month, '2025-10', 'Outubro de 2025',
-        1284, 901, 411, 4100),
-    // Categoria fechada: tudo decidido.
-    _make(CategoryGranularity.month, '2025-09', 'Setembro de 2025',
-        906, 906, 798, 2900),
-    // Mal começado.
-    _make(CategoryGranularity.month, '2025-08', 'Agosto de 2025',
-        2041, 449, 184, 6800),
-    // Intocado: exercita o caso 0 na barra e no anel.
-    _make(CategoryGranularity.month, '2025-07', 'Julho de 2025',
-        3118, 0, 0, 9700),
-    // Mantidas sem álbum dominam: segmento azul bem maior que o verde.
-    _make(CategoryGranularity.month, '2025-06', 'Junho de 2025',
-        874, 806, 91, 2600),
-    _make(CategoryGranularity.month, '2025-05', 'Maio de 2025',
-        1502, 640, 512, 5100),
-    // Categoria minúscula: testa o rótulo no singular implícito.
-    _make(CategoryGranularity.month, '2025-04', 'Abril de 2025',
-        3, 1, 1, 12),
-  ];
+    return keys
+        .map((key) {
+          final parts = key.split('-');
+          final month = int.parse(parts[1]);
+          final label = '${_monthNames[month]} de ${parts[0]}';
+          return _summarize(
+            CategoryRef(granularity: CategoryGranularity.month, key: key),
+            label,
+            MockMediaItems.byMonth(key),
+          );
+        })
+        .whereType<CategorySummary>()
+        .toList();
+  }
 
-  static final _years = [
-    _make(CategoryGranularity.year, '2025', '2025', 18402, 9210, 6104, 61000),
-    _make(CategoryGranularity.year, '2024', '2024', 21876, 21876, 19340, 74000),
-    _make(CategoryGranularity.year, '2023', '2023', 14330, 2011, 640, 48000),
-    _make(CategoryGranularity.year, '2022', '2022', 7810, 0, 0, 26000),
-  ];
+  static List<CategorySummary> _years() {
+    final keys = MockMediaItems.all
+        .map((i) => i.dateTaken.year.toString())
+        .toSet()
+        .toList()
+      ..sort((a, b) => b.compareTo(a));
 
-  // Tipo não forma partição: Imagens contém Fotos e Screenshots (6.1.5).
-  // Somar as quatro linhas não fecha o total, e é esperado.
-  static final _types = [
-    _make(CategoryGranularity.type, 'photos', 'Fotos',
-        41209, 19004, 13880, 152000),
-    _make(CategoryGranularity.type, 'screenshots', 'Screenshots',
-        9877, 3120, 402, 3900),
-    _make(CategoryGranularity.type, 'images', 'Imagens',
-        51086, 22124, 14282, 155900),
-    _make(CategoryGranularity.type, 'videos', 'Vídeos',
-        11332, 5186, 4620, 66300),
-  ];
+    return keys
+        .map((key) => _summarize(
+              CategoryRef(granularity: CategoryGranularity.year, key: key),
+              key,
+              MockMediaItems.byYear(key),
+            ))
+        .whereType<CategorySummary>()
+        .toList();
+  }
 
-  // Álbum: keptItems == classifiedItems == totalItems por definição.
-  // O tile de álbum ignora as métricas, mas o assert de CategorySummary
-  // não — se inverter, quebra em debug.
-  static final _albums = [
-    _make(CategoryGranularity.album, 'alb-1', 'Família',
-        4219, 4219, 4219, 1900),
-    _make(CategoryGranularity.album, 'alb-2', 'Viagens',
-        3740, 3740, 3740, 2400),
-    _make(CategoryGranularity.album, 'alb-3', 'Documentos',
-        1108, 1108, 1108, 210),
-    _make(CategoryGranularity.album, 'alb-4', 'Receitas',
-        332, 332, 332, 96),
-    _make(CategoryGranularity.album, 'alb-5', 'Trabalho',
-        9503, 9503, 9503, 6100),
-    _make(CategoryGranularity.album, 'alb-6',
-        'Comprovantes de pagamento e recibos', 87, 87, 87, 14),
-  ];
+  static List<CategorySummary> _types() {
+    // Ordem fixa (6.1.8). Mesmo padrão skip-se-vazio dos demais
+    // granularidades: um tipo sem item contável não vira tile.
+    return [
+      _summarize(
+        CategoryRef(granularity: CategoryGranularity.type, key: 'photos'),
+        'Fotos',
+        MockMediaItems.photos(),
+      ),
+      _summarize(
+        CategoryRef(
+            granularity: CategoryGranularity.type, key: 'screenshots'),
+        'Screenshots',
+        MockMediaItems.screenshots(),
+      ),
+      _summarize(
+        CategoryRef(granularity: CategoryGranularity.type, key: 'images'),
+        'Imagens',
+        MockMediaItems.images(),
+      ),
+      _summarize(
+        CategoryRef(granularity: CategoryGranularity.type, key: 'videos'),
+        'Vídeos',
+        MockMediaItems.videos(),
+      ),
+    ].whereType<CategorySummary>().toList();
+  }
+
+  static List<CategorySummary> _albums() {
+    final ids = MockMediaItems.all
+        .map((i) => i.albumId)
+        .whereType<String>()
+        .toSet()
+        .toList()
+      ..sort((a, b) =>
+          (MockAlbums.names[a] ?? a).compareTo(MockAlbums.names[b] ?? b));
+
+    return ids
+        .map((id) => _summarize(
+              CategoryRef(granularity: CategoryGranularity.album, key: id),
+              MockAlbums.names[id] ?? id,
+              MockMediaItems.byAlbum(id),
+            ))
+        .whereType<CategorySummary>()
+        .toList();
+  }
+
+  /// `null` se a categoria não tiver nenhum item contável (6.1.10) —
+  /// evita gerar um `CategoryTile` para um recorte vazio.
+  static CategorySummary? _summarize(
+    CategoryRef ref,
+    String label,
+    List<MediaItemEntity> items,
+  ) {
+    final countable = items.where((i) => i.isCountable).toList();
+    if (countable.isEmpty) return null;
+
+    final kept =
+        countable.where((i) => i.decision == TriageDecision.kept).toList();
+
+    // Fix deliberado: NÃO usar `isClassified` (albumId != null) aqui. Um
+    // item classificado que entrou na fila de exclusão preserva albumId
+    // (3.2.5) mas deixa de estar "mantido" — 6.1.2 manda esse item para
+    // o trilho vazio, não para os segmentos preenchidos. Sem essa
+    // restrição extra, `classifiedItems` podia superar `keptItems` e
+    // quebrar o assert de CategorySummary.
+    final classified = kept.where((i) => i.albumId != null).length;
+
+    final sizeBytes = countable.fold<int>(0, (sum, i) => sum + i.sizeBytes);
+
+    return CategorySummary(
+      ref: ref,
+      label: label,
+      totalItems: countable.length,
+      keptItems: kept.length,
+      classifiedItems: classified,
+      sizeBytes: sizeBytes,
+      coverItemId: countable.first.id,
+    );
+  }
 }
