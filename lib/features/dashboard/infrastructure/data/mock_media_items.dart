@@ -1,5 +1,7 @@
 import '../../domain/entities/media_item_entity.dart';
+import '../../domain/enums/category_granularity.dart';
 import '../../domain/enums/triage_decision.dart';
+import '../../domain/models/category_summary.dart';
 
 /// Placeholder até a entidade `Album` (2.2.2) entrar no domínio. Mapeia
 /// albumId → nome só para rotular os testes mockados; some quando o
@@ -54,6 +56,27 @@ abstract final class MockMediaItems {
 
   static List<MediaItemEntity> videos() =>
       all.where((i) => i.mediaType == MediaType.video).toList();
+
+  /// Ponto único de resolução `CategoryRef → itens`. Usado pela Tela de
+  /// Triagem e, futuramente, pelo `TriageRepository` real como contrato
+  /// de referência. Filtra por [MediaItemEntity.isCountable] (6.1.10):
+  /// itens retidos ou indisponíveis não entram em nenhum recorte.
+  static List<MediaItemEntity> forCategory(CategoryRef ref) {
+    final items = switch (ref.granularity) {
+      CategoryGranularity.all => all,
+      CategoryGranularity.month => byMonth(ref.key),
+      CategoryGranularity.year => byYear(ref.key),
+      CategoryGranularity.album => byAlbum(ref.key),
+      CategoryGranularity.type => switch (ref.key) {
+          'photos' => photos(),
+          'screenshots' => screenshots(),
+          'images' => images(),
+          'videos' => videos(),
+          _ => const <MediaItemEntity>[],
+        },
+    };
+    return items.where((i) => i.isCountable).toList();
+  }
 
   static int _seq = 0;
 
