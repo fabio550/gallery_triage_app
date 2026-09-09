@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:gallery_triage_app/core/application/providers/last_used_album_provider.dart';
 import 'package:gallery_triage_app/core/domain/entities/media_item_entity.dart';
 import 'package:gallery_triage_app/core/domain/enums/triage_decision.dart';
 import 'package:gallery_triage_app/core/domain/models/category_summary.dart';
@@ -76,11 +77,30 @@ class TriageSessionNotifier extends Notifier<TriageSessionState> {
     if (current == null) return;
 
     if (current.albumId == albumId) {
-      // 3.2.4: não avança.
+      // 3.2.4: não avança, e esta ação NÃO grava lastUsedAlbumId
+      // (6.2.16 — só a vinculação a um álbum diferente grava).
       _pushUndo(current);
       _replaceCurrent(current.unassignAlbum());
       return;
     }
+
+    _pushUndo(current);
+    _replaceCurrent(current.assignToAlbum(albumId, DateTime.now()));
+    _advance();
+    ref.read(lastUsedAlbumProvider.notifier).set(albumId);
+  }
+
+  /// Swipe para cima (6.2.9/6.2.18): classifica direto no álbum de
+  /// `lastUsedAlbumId`, sem abrir o painel. Inerte se não houver
+  /// nenhum álbum armado ainda — a UI decide se deixa o gesto chegar
+  /// aqui (a pílula não é renderizada com `lastUsedAlbumId` nulo), mas
+  /// o notifier também é defensivo.
+  void classifyWithLastUsedAlbum() {
+    final albumId = ref.read(lastUsedAlbumProvider);
+    if (albumId == null) return;
+
+    final current = state.currentItem;
+    if (current == null) return;
 
     _pushUndo(current);
     _replaceCurrent(current.assignToAlbum(albumId, DateTime.now()));
