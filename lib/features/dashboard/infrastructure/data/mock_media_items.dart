@@ -1,7 +1,9 @@
-import '../../domain/entities/media_item_entity.dart';
-import '../../domain/enums/category_granularity.dart';
-import '../../domain/enums/triage_decision.dart';
-import '../../domain/models/category_summary.dart';
+
+import 'package:gallery_triage_app/core/domain/enums/category_granularity.dart';
+import 'package:gallery_triage_app/core/domain/enums/triage_decision.dart';
+import 'package:gallery_triage_app/core/domain/models/category_summary.dart';
+
+import '../../../../core/domain/entities/media_item_entity.dart';
 
 /// Placeholder até a entidade `Album` (2.2.2) entrar no domínio. Mapeia
 /// albumId → nome só para rotular os testes mockados; some quando o

@@ -2,7 +2,7 @@ import 'package:gallery_triage_app/core/domain/entities/media_item_entity.dart';
 import 'package:gallery_triage_app/core/domain/enums/category_granularity.dart';
 import 'package:gallery_triage_app/core/domain/enums/triage_decision.dart';
 import 'package:gallery_triage_app/core/domain/models/category_summary.dart';
-import 'package:gallery_triage_app/core/infrastructure/mock/mock_media_items.dart';
+import 'package:gallery_triage_app/features/dashboard/infrastructure/data/mock_media_items.dart';
 
 const _monthNames = [
   '',
