@@ -1,9 +1,3 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:gallery_triage_app/core/domain/entities/media_item_entity.dart';
-import 'package:gallery_triage_app/core/domain/enums/triage_decision.dart';
-import 'package:gallery_triage_app/core/domain/models/category_summary.dart';
-import 'package:gallery_triage_app/core/infrastructure/mock/mock_media_items.dart';
-import 'package:gallery_triage_app/features/triage/application/triage_session_state.dart';
 
 final triageSessionProvider = NotifierProvider.family<TriageSessionNotifier,
     TriageSessionState, CategoryRef>(TriageSessionNotifier.new);
@@ -18,11 +12,16 @@ final triageSessionProvider = NotifierProvider.family<TriageSessionNotifier,
 /// Fora de escopo aqui, entram em etapas seguintes: pilha de desfazer
 /// (6.2.14/6.2.15 — Etapa 5) e diálogo de saída com fila pendente
 /// (3.5.3 — Etapa 8).
-class TriageSessionNotifier
-    extends FamilyNotifier<TriageSessionState, CategoryRef> {
+class TriageSessionNotifier extends Notifier<TriageSessionState> {
+  TriageSessionNotifier(this._categoryRef);
+
+  // Riverpod 3.0 fundiu FamilyNotifier em Notifier: o argumento da
+  // family chega pelo construtor, não mais por parâmetro de build().
+  final CategoryRef _categoryRef;
+
   @override
-  TriageSessionState build(CategoryRef arg) {
-    final items = MockMediaItems.forCategory(arg);
+  TriageSessionState build() {
+    final items = MockMediaItems.forCategory(_categoryRef);
     return TriageSessionState(
       items: items,
       currentIndex: _resolveInitialIndex(items),
