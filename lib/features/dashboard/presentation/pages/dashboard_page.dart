@@ -4,6 +4,7 @@ import 'package:gallery_triage_app/features/dashboard/infrastructure/data/mock_c
 import 'package:gallery_triage_app/features/dashboard/presentation/widgets/category_list.dart';
 import 'package:gallery_triage_app/features/dashboard/presentation/widgets/granularity_selector.dart';
 import 'package:gallery_triage_app/features/dashboard/presentation/widgets/info_stats_card.dart';
+import 'package:go_router/go_router.dart';
 class DashboardPage extends StatefulWidget {
   const DashboardPage({super.key});
 
@@ -18,24 +19,22 @@ class _DashboardPageState extends State<DashboardPage> {
   @override
   Widget build(BuildContext context) {
     
-    // TEMPORÁRIO: dados fixos até o repositório existir.
-    const totalItems = 62418;
-    const totalSizeGb = 21.7;
-    const classifiedItems = 18902;
-    const keptItems = 27310;
+    // O card geral é a categoria "Todos os itens" — mesma fonte que
+    // MockCategories.of(album/mês/ano/tipo), nunca um número à parte.
+    final overall = MockCategories.of(CategoryGranularity.all).first;
     final categories = MockCategories.of(_granularity);
     
     return Scaffold(
       appBar: AppBar(title: const Text('Triagem')),
       body: Column(
         children: [
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 16),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
             child: InfoStatsCard(
-              totalItems: totalItems,
-              totalSizeGb: totalSizeGb,
-              classifiedItems: classifiedItems,
-              keptItems: keptItems,
+              totalItems: overall.totalItems,
+              totalSizeGb: overall.sizeBytes / (1024 * 1024 * 1024),
+              classifiedItems: overall.classifiedItems,
+              keptItems: overall.keptItems,
             ),
           ),
           const SizedBox(height: 12),
@@ -53,7 +52,8 @@ class _DashboardPageState extends State<DashboardPage> {
               child: CategoryList(
                 categories: categories,
                 granularity: _granularity,
-                onCategoryTap: (summary) => context.push('/triage-page', extra: summary),
+                onCategoryTap: (summary) =>
+                    context.push('/triage-page', extra: summary),
               ),
             ),
           ),
