@@ -26,14 +26,24 @@ class TriagePage extends ConsumerWidget {
     final notifier = ref.read(provider.notifier);
 
     // TODO §7 (Etapa 8): estado de conclusão real, com resumo das duas
-    // métricas e ação de retorno. Isto é só o guard mínimo para não
-    // indexar `session.items` fora do intervalo quando a fila acaba ou
-    // a categoria está vazia.
+    // métricas e ação de retorno ao dashboard. Por ora, só o botão que
+    // evita o beco sem saída: reabrir a categoria para classificar em
+    // álbum itens que ficaram mantidos sem álbum (3.2.2).
     if (session.isAtEnd) {
       return Scaffold(
         appBar: AppBar(title: Text(category.label)),
         body: Center(
-          child: Text('Fila concluída', style: text.titleMedium),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('Fila concluída', style: text.titleMedium),
+              const SizedBox(height: 16),
+              FilledButton(
+                onPressed: notifier.restartFromBeginning,
+                child: const Text('Rever itens'),
+              ),
+            ],
+          ),
         ),
       );
     }
@@ -75,14 +85,31 @@ class TriagePage extends ConsumerWidget {
             onThumbTap: notifier.jumpTo,
           ),
           Expanded(
-            child: TriageCard(
-              // Key por item: sem ela o State do card sobrevive à troca e
-              // o próximo entra deslocado, onde o anterior saiu.
-              key: ValueKey(current.id),
-              item: current,
-              behind: nextItem != null ? MediaCard(item: nextItem) : null,
-              onSwipeLeft: notifier.markForDeletion,
-              onSwipeRight: notifier.keep,
+            child: Stack(
+              children: [
+                TriageCard(
+                  // Key por item: sem ela o State do card sobrevive à
+                  // troca e o próximo entra deslocado, onde o anterior
+                  // saiu.
+                  key: ValueKey(current.id),
+                  item: current,
+                  behind: nextItem != null ? MediaCard(item: nextItem) : null,
+                  onSwipeLeft: notifier.markForDeletion,
+                  onSwipeRight: notifier.keep,
+                ),
+                // Overlay topo-esquerdo (6.2.10). Desabilitado com a
+                // pilha vazia — `onPressed: null` já cobre isso, sem
+                // precisar de um estado visual separado.
+                Positioned(
+                  top: 8,
+                  left: 8,
+                  child: IconButton.filledTonal(
+                    icon: const Icon(Icons.undo),
+                    tooltip: 'Desfazer',
+                    onPressed: session.canUndo ? notifier.undo : null,
+                  ),
+                ),
+              ],
             ),
           ),
           TriageActionBar(
