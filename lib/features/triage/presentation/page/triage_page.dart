@@ -5,6 +5,7 @@ import 'package:gallery_triage_app/core/domain/models/category_summary.dart';
 import 'package:gallery_triage_app/core/presentation/widgets/progress_bar.dart';
 import 'package:gallery_triage_app/features/triage/application/triage_session_notifier.dart';
 import 'package:gallery_triage_app/features/triage/presentation/widgets/media_card.dart';
+import 'package:gallery_triage_app/features/triage/presentation/widgets/triage_action_bar.dart';
 import 'package:gallery_triage_app/features/triage/presentation/widgets/triage_card.dart';
 import 'package:gallery_triage_app/features/triage/presentation/widgets/triage_carousel.dart';
 
@@ -84,8 +85,11 @@ class TriagePage extends ConsumerWidget {
               onSwipeRight: notifier.keep,
             ),
           ),
-          // TODO: TriageActionBar(onDelete:, onSkip:, onKeep:) — 6.2.12,
-          // Etapa 4. Até lá, notifier.skip() fica sem chamador.
+          TriageActionBar(
+            onDelete: notifier.markForDeletion,
+            onSkip: notifier.skip,
+            onKeep: notifier.keep,
+          ),
         ],
       ),
     );
