@@ -1,0 +1,54 @@
+import 'package:gallery_triage_app/core/domain/entities/media_item_entity.dart';
+import 'package:gallery_triage_app/core/domain/enums/triage_decision.dart';
+
+/// Estado de uma sessão de triagem: os itens da categoria ativa e o
+/// cursor. Não é o [MediaItemEntity] cru — é o recorte que a Tela de
+/// Triagem está navegando.
+class TriageSessionState {
+  const TriageSessionState({
+    required this.items,
+    required this.currentIndex,
+  });
+
+  final List<MediaItemEntity> items;
+
+  /// Pode chegar a `items.length` — é o estado de fim da fila (§7), não
+  /// um índice inválido a ser evitado.
+  final int currentIndex;
+
+  MediaItemEntity? get currentItem =>
+      currentIndex >= 0 && currentIndex < items.length
+          ? items[currentIndex]
+          : null;
+
+  bool get hasNext => currentIndex < items.length - 1;
+
+  /// §7 — cursor passou do último item. Categoria nunca é marcada como
+  /// concluída automaticamente (3.2.7); isto é só progresso informativo
+  /// para a UI decidir mostrar o estado de conclusão.
+  bool get isAtEnd => items.isEmpty || currentIndex >= items.length;
+
+  int get keptCount =>
+      items.where((i) => i.decision == TriageDecision.kept).length;
+
+  /// Mesma restrição de mock_categories.dart: um item classificado que
+  /// caiu na fila (3.2.5) não conta como classificado no agregado —
+  /// 6.1.2 manda esse item para o trilho vazio.
+  int get classifiedCount => items
+      .where((i) => i.decision == TriageDecision.kept && i.albumId != null)
+      .length;
+
+  int get queueCount => items.where((i) => i.isInDeletionQueue).length;
+
+  int get totalCount => items.length;
+
+  TriageSessionState copyWith({
+    List<MediaItemEntity>? items,
+    int? currentIndex,
+  }) {
+    return TriageSessionState(
+      items: items ?? this.items,
+      currentIndex: currentIndex ?? this.currentIndex,
+    );
+  }
+}
