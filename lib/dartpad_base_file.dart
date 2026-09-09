@@ -26,6 +26,12 @@
 //---26.TRIAGE-CARD
 //---27.MEDIA-CARD
 //---28.SWIPE-OVERLAY
+//---29.MOCK-MEDIA-ITEMS
+//---30.TRIAGE-SESSION-NOTIFIER
+//---31.TRIAGE-SESSION-STATE
+//---32.MEDIA-PLACEHOLDER
+//---33.TRIAGE-ACTION-BAR
+//---34.UNDO-ENTRY
 //--------------------------------------------------//1.IMPORTS
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -934,11 +940,11 @@ class CategoryList extends StatelessWidget {
         return isAlbum ?
           CategoryTile.album(
             summary: summary,
-            onTap: () => context.push('/triage-page', extra: categories[index])
+            onTap: () => onCategoryTap(summary),
           ) :
           CategoryTile(
             summary: summary,
-            onTap: () => context.push('/triage-page', extra: categories[index])
+            onTap: () => onCategoryTap(summary),
           );
       },
     );
@@ -1128,7 +1134,7 @@ class GranularitySelector extends StatelessWidget {
     final text = Theme.of(context).textTheme;
 
     return SizedBox(
-      width: MediaQuery.of(context).size.width-50,
+      width: double.infinity,
       child: Card(
         clipBehavior: Clip.antiAlias,
         shape: RoundedRectangleBorder(
@@ -1286,6 +1292,7 @@ class TotalItemsInfo extends StatelessWidget {
   }
 }
 //-------------------------------------------------//21.DASHBOARD-PAGE
+
 class DashboardPage extends StatefulWidget {
   const DashboardPage({super.key});
 
@@ -1300,24 +1307,22 @@ class _DashboardPageState extends State<DashboardPage> {
   @override
   Widget build(BuildContext context) {
     
-    // TEMPORÁRIO: dados fixos até o repositório existir.
-    const totalItems = 62418;
-    const totalSizeGb = 21.7;
-    const classifiedItems = 18902;
-    const keptItems = 27310;
+    // O card geral é a categoria "Todos os itens" — mesma fonte que
+    // MockCategories.of(album/mês/ano/tipo), nunca um número à parte.
+    final overall = MockCategories.of(CategoryGranularity.all).first;
     final categories = MockCategories.of(_granularity);
     
     return Scaffold(
       appBar: AppBar(title: const Text('Triagem')),
       body: Column(
         children: [
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 16),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
             child: InfoStatsCard(
-              totalItems: totalItems,
-              totalSizeGb: totalSizeGb,
-              classifiedItems: classifiedItems,
-              keptItems: keptItems,
+              totalItems: overall.totalItems,
+              totalSizeGb: overall.sizeBytes / (1024 * 1024 * 1024),
+              classifiedItems: overall.classifiedItems,
+              keptItems: overall.keptItems,
             ),
           ),
           const SizedBox(height: 12),
@@ -1335,7 +1340,8 @@ class _DashboardPageState extends State<DashboardPage> {
               child: CategoryList(
                 categories: categories,
                 granularity: _granularity,
-                onCategoryTap: (summary) => debugPrint(summary.ref.key),
+                onCategoryTap: (summary) =>
+                    context.push('/triage-page', extra: summary),
               ),
             ),
           ),
@@ -1345,175 +1351,221 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 }
 //-------------------------------------------------//22.MOCK-CATEGORIES
+const _monthNames = [
+  '',
+  'Janeiro',
+  'Fevereiro',
+  'Março',
+  'Abril',
+  'Maio',
+  'Junho',
+  'Julho',
+  'Agosto',
+  'Setembro',
+  'Outubro',
+  'Novembro',
+  'Dezembro',
+];
+
+/// Deriva [CategorySummary] a partir de [MockMediaItems.all]. Nenhum
+/// total é digitado — é a mesma garantia que o `TriageRepository` real
+/// (2.4.2) vai dar via `COUNT` indexado (8.3).
 abstract final class MockCategories {
   static List<CategorySummary> of(CategoryGranularity granularity) {
     return switch (granularity) {
-      CategoryGranularity.all => _all,
-      CategoryGranularity.month => _months,
-      CategoryGranularity.year => _years,
-      CategoryGranularity.type => _types,
-      CategoryGranularity.album => _albums,
+      CategoryGranularity.all => _all(),
+      CategoryGranularity.month => _months(),
+      CategoryGranularity.year => _years(),
+      CategoryGranularity.type => _types(),
+      CategoryGranularity.album => _albums(),
     };
   }
 
-  static CategorySummary _make(
-    CategoryGranularity granularity,
-    String key,
-    String label,
-    int total,
-    int kept,
-    int classified,
-    int sizeMb,
-  ) {
-    return CategorySummary(
-      ref: CategoryRef(granularity: granularity, key: key),
-      label: label,
-      totalItems: total,
-      keptItems: kept,
-      classifiedItems: classified,
-      sizeBytes: sizeMb * 1024 * 1024,
+  static List<CategorySummary> _all() {
+    final summary = _summarize(
+      CategoryRef(granularity: CategoryGranularity.all, key: 'all'),
+      'Todos os itens',
+      MockMediaItems.all,
     );
+    return summary == null ? const [] : [summary];
   }
 
-  static final _all = [
-    _make(CategoryGranularity.all, 'all', 'Todos os itens',
-        62418, 27310, 18902, 22220),
-  ];
+  static List<CategorySummary> _months() {
+    final keys = MockMediaItems.all
+        .map((i) => MockMediaItems.monthKey(i.dateTaken))
+        .toSet()
+        .toList()
+      ..sort((a, b) => b.compareTo(a)); // 6.1.8: temporal decrescente.
 
-  static final _months = [
-    // Recém-triado: quase tudo classificado.
-    _make(CategoryGranularity.month, '2025-10', 'Outubro de 2025',
-        1284, 901, 411, 4100),
-    // Categoria fechada: tudo decidido.
-    _make(CategoryGranularity.month, '2025-09', 'Setembro de 2025',
-        906, 906, 798, 2900),
-    // Mal começado.
-    _make(CategoryGranularity.month, '2025-08', 'Agosto de 2025',
-        2041, 449, 184, 6800),
-    // Intocado: exercita o caso 0 na barra e no anel.
-    _make(CategoryGranularity.month, '2025-07', 'Julho de 2025',
-        3118, 0, 0, 9700),
-    // Mantidas sem álbum dominam: segmento azul bem maior que o verde.
-    _make(CategoryGranularity.month, '2025-06', 'Junho de 2025',
-        874, 806, 91, 2600),
-    _make(CategoryGranularity.month, '2025-05', 'Maio de 2025',
-        1502, 640, 512, 5100),
-    // Categoria minúscula: testa o rótulo no singular implícito.
-    _make(CategoryGranularity.month, '2025-04', 'Abril de 2025',
-        3, 1, 1, 12),
-  ];
+    return keys
+        .map((key) {
+          final parts = key.split('-');
+          final month = int.parse(parts[1]);
+          final label = '${_monthNames[month]} de ${parts[0]}';
+          return _summarize(
+            CategoryRef(granularity: CategoryGranularity.month, key: key),
+            label,
+            MockMediaItems.byMonth(key),
+          );
+        })
+        .whereType<CategorySummary>()
+        .toList();
+  }
 
-  static final _years = [
-    _make(CategoryGranularity.year, '2025', '2025', 18402, 9210, 6104, 61000),
-    _make(CategoryGranularity.year, '2024', '2024', 21876, 21876, 19340, 74000),
-    _make(CategoryGranularity.year, '2023', '2023', 14330, 2011, 640, 48000),
-    _make(CategoryGranularity.year, '2022', '2022', 7810, 0, 0, 26000),
-  ];
+  static List<CategorySummary> _years() {
+    final keys = MockMediaItems.all
+        .map((i) => i.dateTaken.year.toString())
+        .toSet()
+        .toList()
+      ..sort((a, b) => b.compareTo(a));
 
-  // Tipo não forma partição: Imagens contém Fotos e Screenshots (6.1.5).
-  // Somar as quatro linhas não fecha o total, e é esperado.
-  static final _types = [
-    _make(CategoryGranularity.type, 'photos', 'Fotos',
-        41209, 19004, 13880, 152000),
-    _make(CategoryGranularity.type, 'screenshots', 'Screenshots',
-        9877, 3120, 402, 3900),
-    _make(CategoryGranularity.type, 'images', 'Imagens',
-        51086, 22124, 14282, 155900),
-    _make(CategoryGranularity.type, 'videos', 'Vídeos',
-        11332, 5186, 4620, 66300),
-  ];
+    return keys
+        .map((key) => _summarize(
+              CategoryRef(granularity: CategoryGranularity.year, key: key),
+              key,
+              MockMediaItems.byYear(key),
+            ))
+        .whereType<CategorySummary>()
+        .toList();
+  }
 
-  // Álbum: keptItems == classifiedItems == totalItems por definição.
-  // O tile de álbum ignora as métricas, mas o assert de CategorySummary
-  // não — se inverter, quebra em debug.
-  static final _albums = [
-    _make(CategoryGranularity.album, 'alb-1', 'Família',
-        4219, 4219, 4219, 1900),
-    _make(CategoryGranularity.album, 'alb-2', 'Viagens',
-        3740, 3740, 3740, 2400),
-    _make(CategoryGranularity.album, 'alb-3', 'Documentos',
-        1108, 1108, 1108, 210),
-    _make(CategoryGranularity.album, 'alb-4', 'Receitas',
-        332, 332, 332, 96),
-    _make(CategoryGranularity.album, 'alb-5', 'Trabalho',
-        9503, 9503, 9503, 6100),
-    _make(CategoryGranularity.album, 'alb-6',
-        'Comprovantes de pagamento e recibos', 87, 87, 87, 14),
-  ];
+  static List<CategorySummary> _types() {
+    // Ordem fixa (6.1.8). Mesmo padrão skip-se-vazio dos demais
+    // granularidades: um tipo sem item contável não vira tile.
+    return [
+      _summarize(
+        CategoryRef(granularity: CategoryGranularity.type, key: 'photos'),
+        'Fotos',
+        MockMediaItems.photos(),
+      ),
+      _summarize(
+        CategoryRef(
+            granularity: CategoryGranularity.type, key: 'screenshots'),
+        'Screenshots',
+        MockMediaItems.screenshots(),
+      ),
+      _summarize(
+        CategoryRef(granularity: CategoryGranularity.type, key: 'images'),
+        'Imagens',
+        MockMediaItems.images(),
+      ),
+      _summarize(
+        CategoryRef(granularity: CategoryGranularity.type, key: 'videos'),
+        'Vídeos',
+        MockMediaItems.videos(),
+      ),
+    ].whereType<CategorySummary>().toList();
+  }
+
+  static List<CategorySummary> _albums() {
+    final ids = MockMediaItems.all
+        .map((i) => i.albumId)
+        .whereType<String>()
+        .toSet()
+        .toList()
+      ..sort((a, b) =>
+          (MockAlbums.names[a] ?? a).compareTo(MockAlbums.names[b] ?? b));
+
+    return ids
+        .map((id) => _summarize(
+              CategoryRef(granularity: CategoryGranularity.album, key: id),
+              MockAlbums.names[id] ?? id,
+              MockMediaItems.byAlbum(id),
+            ))
+        .whereType<CategorySummary>()
+        .toList();
+  }
+
+  /// `null` se a categoria não tiver nenhum item contável (6.1.10) —
+  /// evita gerar um `CategoryTile` para um recorte vazio.
+  static CategorySummary? _summarize(
+    CategoryRef ref,
+    String label,
+    List<MediaItemEntity> items,
+  ) {
+    final countable = items.where((i) => i.isCountable).toList();
+    if (countable.isEmpty) return null;
+
+    final kept =
+        countable.where((i) => i.decision == TriageDecision.kept).toList();
+
+    // Fix deliberado: NÃO usar `isClassified` (albumId != null) aqui. Um
+    // item classificado que entrou na fila de exclusão preserva albumId
+    // (3.2.5) mas deixa de estar "mantido" — 6.1.2 manda esse item para
+    // o trilho vazio, não para os segmentos preenchidos. Sem essa
+    // restrição extra, `classifiedItems` podia superar `keptItems` e
+    // quebrar o assert de CategorySummary.
+    final classified = kept.where((i) => i.albumId != null).length;
+
+    final sizeBytes = countable.fold<int>(0, (sum, i) => sum + i.sizeBytes);
+
+    return CategorySummary(
+      ref: ref,
+      label: label,
+      totalItems: countable.length,
+      keptItems: kept.length,
+      classifiedItems: classified,
+      sizeBytes: sizeBytes,
+      coverItemId: countable.first.id,
+    );
+  }
 }
 //-------------------------------------------------//23.TRIAGE-PAGE
 
-class TriagePage extends StatefulWidget {
+/// Sem estado próprio (2.1.2 — "Nenhum estado de triagem reside em
+/// widget"). Cursor, itens e decisões vivem em [TriageSessionNotifier];
+/// esta página só lê o estado e encaminha os callbacks de gesto/botão
+/// para os métodos do notifier.
+class TriagePage extends ConsumerWidget {
   const TriagePage({required this.category, super.key});
 
   final CategorySummary category;
 
   @override
-  State<TriagePage> createState() => _TriagePageState();
-}
-
-class _TriagePageState extends State<TriagePage> {
-
-  final List<Color> _items = const [
-    Colors.green,
-    Colors.red,
-    Colors.orange,
-    Colors.amber,
-    Colors.blueGrey,
-    Colors.indigo,
-    Colors.teal,
-    Colors.purple,
-    Colors.brown,
-    Colors.cyan,
-  ];
-
-  late int _currentIndex = _resolveInitialIndex();
-
-  int _resolveInitialIndex() => 0; // TODO: 6.2.4
-
-  bool get _hasNext => _currentIndex < _items.length - 1;
-
-  void _advance() {
-    if (_hasNext) setState(() => _currentIndex++);
-    // TODO: §7 — fim da fila da categoria quando não há próximo.
-  }
-
-  // --- Decisões (3.4) -----------------------------------------------------
-  // Swipe e botão chamam o mesmo método de propósito: são caminhos
-  // equivalentes, e lambdas duplicadas divergiriam no primeiro ajuste.
-
-  void _markForDeletion() {
-    debugPrint('EXCLUIR item $_currentIndex');
-    // TODO: gravar UndoEntry com âncora (6.2.15) e incrementar o badge.
-    _advance();
-  }
-
-  void _keep() {
-    debugPrint('MANTER item $_currentIndex');
-    _advance();
-  }
-
-  /// Não altera decisão nem classificação. Apenas move o cursor (3.2.6).
-  void _skip() => _advance();
-
-  /// Toque no carrossel. Não entra na pilha de desfazer (6.2.14), mas
-  /// define a âncora da próxima ação (6.2.15).
-  void _jumpTo(int index) {
-    setState(() => _currentIndex = index);
-  }
-
-  @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final text = Theme.of(context).textTheme;
-    final category = widget.category;
+    final provider = triageSessionProvider(category.ref);
+    final session = ref.watch(provider);
+    final notifier = ref.read(provider.notifier);
+
+    // TODO §7 (Etapa 8): estado de conclusão real, com resumo das duas
+    // métricas e ação de retorno ao dashboard. Por ora, só o botão que
+    // evita o beco sem saída: reabrir a categoria para classificar em
+    // álbum itens que ficaram mantidos sem álbum (3.2.2).
+    if (session.isAtEnd) {
+      return Scaffold(
+        appBar: AppBar(title: Text(category.label)),
+        body: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('Fila concluída', style: text.titleMedium),
+              const SizedBox(height: 16),
+              FilledButton(
+                onPressed: notifier.restartFromBeginning,
+                child: const Text('Rever itens'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final current = session.currentItem!;
+    final nextItem =
+        session.hasNext ? session.items[session.currentIndex + 1] : null;
 
     return Scaffold(
       appBar: AppBar(
         title: Column(
           children: [
             Text(category.label),
+            // `session.totalCount` em vez de `category.totalItems`: os
+            // dois vêm do mesmo `MockMediaItems.forCategory`, mas usar o
+            // da sessão evita depender de dois caminhos de agregação
+            // ficarem sincronizados manualmente.
             Text(
-              'Item ${_currentIndex + 1} de ${category.totalItems}',
+              'Item ${session.currentIndex + 1} de ${session.totalCount}',
               style: text.bodySmall,
             ),
           ],
@@ -1525,29 +1577,49 @@ class _TriagePageState extends State<TriagePage> {
             padding: const EdgeInsets.symmetric(horizontal: 40),
             child: ProgressBar(
               showLegend: true,
-              totalItems: category.totalItems,
-              classifiedItems: category.classifiedItems,
-              keptItems: category.keptItems,
+              totalItems: session.totalCount,
+              classifiedItems: session.classifiedCount,
+              keptItems: session.keptCount,
             ),
           ),
           TriageCarousel(
-            items: _items,
-            currentIndex: _currentIndex,
-            onThumbTap: _jumpTo,
+            items: session.items,
+            currentIndex: session.currentIndex,
+            onThumbTap: notifier.jumpTo,
           ),
           Expanded(
-            child: TriageCard(
-              // Key por item: sem ela o State do card sobrevive à troca e
-              // o próximo entra deslocado, onde o anterior saiu.
-              key: ValueKey(_currentIndex),
-              item: _items[_currentIndex],
-              behind: _hasNext ? MediaCard(color: _items[_currentIndex + 1]) : null,
-              onSwipeLeft: _markForDeletion,
-              onSwipeRight: _keep,
+            child: Stack(
+              children: [
+                TriageCard(
+                  // Key por item: sem ela o State do card sobrevive à
+                  // troca e o próximo entra deslocado, onde o anterior
+                  // saiu.
+                  key: ValueKey(current.id),
+                  item: current,
+                  behind: nextItem != null ? MediaCard(item: nextItem) : null,
+                  onSwipeLeft: notifier.markForDeletion,
+                  onSwipeRight: notifier.keep,
+                ),
+                // Overlay topo-esquerdo (6.2.10). Desabilitado com a
+                // pilha vazia — `onPressed: null` já cobre isso, sem
+                // precisar de um estado visual separado.
+                Positioned(
+                  top: 8,
+                  left: 8,
+                  child: IconButton.filledTonal(
+                    icon: const Icon(Icons.undo),
+                    tooltip: 'Desfazer',
+                    onPressed: session.canUndo ? notifier.undo : null,
+                  ),
+                ),
+              ],
             ),
           ),
-          // TODO: TriageActionBar(onDelete:, onSkip:, onKeep:) — 6.2.12.
-          // Enquanto não existe, _skip fica sem chamador.
+          TriageActionBar(
+            onDelete: notifier.markForDeletion,
+            onSkip: notifier.skip,
+            onKeep: notifier.keep,
+          ),
         ],
       ),
     );
@@ -1555,8 +1627,10 @@ class _TriagePageState extends State<TriagePage> {
 }
 //-------------------------------------------------//24.TRIAGE-CAROUSEL
 
-class TriageCarousel extends StatelessWidget {
-  final List<Color> items;
+/// StatefulWidget só para o `ScrollController` — o cursor em si continua
+/// vivendo no notifier (2.1.2), este widget apenas reage a ele.
+class TriageCarousel extends StatefulWidget {
+  final List<MediaItemEntity> items;
   final int currentIndex;
   final ValueChanged<int> onThumbTap;
 
@@ -1567,21 +1641,80 @@ class TriageCarousel extends StatelessWidget {
     super.key,
   });
 
+  @override
+  State<TriageCarousel> createState() => _TriageCarouselState();
+}
+
+class _TriageCarouselState extends State<TriageCarousel> {
+  final _scrollController = ScrollController();
+
+  // Precisa espelhar exatamente o footprint de CarouselThumb: largura
+  // 90 + margem horizontal 4 de cada lado.
+  static const _thumbFootprint = 98.0;
+  static const _listPadding = 16.0;
+
+  @override
+  void initState() {
+    super.initState();
+    // Sem isso, abrir a categoria numa posição inicial != 0 (6.2.4,
+    // ex.: primeiro item não decidido) mostra o carrossel do começo da
+    // lista em vez de centralizado no item ativo.
+    WidgetsBinding.instance
+        .addPostFrameCallback((_) => _centerActive(animate: false));
+  }
+
+  @override
+  void didUpdateWidget(covariant TriageCarousel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.currentIndex != widget.currentIndex) {
+      _centerActive(animate: true);
+    }
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  /// Foto ativa destacada no centro (6.2.5).
+  void _centerActive({required bool animate}) {
+    if (!_scrollController.hasClients || widget.items.isEmpty) return;
+
+    final viewport = _scrollController.position.viewportDimension;
+    final centerOfActive = _listPadding +
+        widget.currentIndex * _thumbFootprint +
+        _thumbFootprint / 2;
+    final target = (centerOfActive - viewport / 2).clamp(
+      _scrollController.position.minScrollExtent,
+      _scrollController.position.maxScrollExtent,
+    );
+
+    if (animate) {
+      _scrollController.animateTo(
+        target,
+        duration: const Duration(milliseconds: 250),
+        curve: Curves.easeOut,
+      );
+    } else {
+      _scrollController.jumpTo(target);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return SizedBox(
       height: 90,
       child: ListView.builder(
+        controller: _scrollController,
         scrollDirection: Axis.horizontal,
-        itemCount: items.length,
-        padding: const EdgeInsets.symmetric(horizontal: 16),
+        itemCount: widget.items.length,
+        padding: const EdgeInsets.symmetric(horizontal: _listPadding),
         itemBuilder: (context, index) {
           return CarouselThumb(
-            color: items[index],
-            index: currentIndex,
-            isActive: index == currentIndex,
-            onTap: () => onThumbTap(index),
+            item: widget.items[index],
+            isActive: index == widget.currentIndex,
+            onTap: () => widget.onThumbTap(index),
           );
         },
       ),
@@ -1591,22 +1724,21 @@ class TriageCarousel extends StatelessWidget {
 //-------------------------------------------------//25.CAROUSEL-THUMB
 
 class CarouselThumb extends StatelessWidget {
-  final int index;
+  final MediaItemEntity item;
   final bool isActive;
-  final Color color;
   final VoidCallback onTap;
-  
+
   const CarouselThumb({
-    required this.index,
+    required this.item,
     required this.isActive,
-    required this.color,
     required this.onTap,
     super.key,
   });
-  
 
   @override
   Widget build(BuildContext context) {
+    final stateColor = TriageVisualState.of(item).colorIn(context.triageColors);
+
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
@@ -1615,31 +1747,45 @@ class CarouselThumb extends StatelessWidget {
         width: 90,
         height: 90,
         margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+        padding: const EdgeInsets.all(3),
         decoration: BoxDecoration(
-          color: color,
-          borderRadius: BorderRadius.circular(10),
-          border: isActive
-              ? Border.all(color: Colors.white, width: 3)
-              : null,
+          borderRadius: BorderRadius.circular(12),
+          // Contorno de seleção do item ativo (6.2.6) — deliberadamente
+          // um elemento visual separado da borda de estado abaixo, para
+          // não se confundirem.
+          border: isActive ? Border.all(color: Colors.white, width: 3) : null,
           boxShadow: isActive
-            ? [
-                BoxShadow(
-                  color: Colors.black.withValues(),
-                  blurRadius: 8,
-                  offset: const Offset(0, 4),
+              ? [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.35),
+                    blurRadius: 8,
+                    offset: const Offset(0, 4),
+                  ),
+                ]
+              : const [],
+        ),
+        child: Container(
+          decoration: BoxDecoration(
+            color: mediaPlaceholderColor(item.id),
+            borderRadius: BorderRadius.circular(9),
+            // Borda de estado (6.2.7, precedência 3.3) — sempre visível,
+            // ativo ou não.
+            border: Border.all(color: stateColor, width: 2),
+          ),
+          child: item.isVideo
+              ? const Center(
+                  child: Icon(Icons.videocam, size: 16, color: Colors.white70),
                 )
-              ]
-            : [],
+              : null,
         ),
       ),
     );
   }
 }
-
 //-------------------------------------------------//26.TRIAGE-CARD
 
 class TriageCard extends StatefulWidget {
-  final Color item;
+  final MediaItemEntity item;
   final VoidCallback onSwipeLeft;
   final VoidCallback onSwipeRight;
 
@@ -1761,7 +1907,7 @@ class _TriageCardState extends State<TriageCard>
           animation: _controller,
           // Fora do builder: a árvore da mídia não reconstrói a cada
           // frame de mola nem de arrasto, só o Transform.
-          child: MediaCard(color: widget.item),
+          child: MediaCard(item: widget.item),
           builder: (context, child) {
             final progress = _progress;
 
@@ -1803,30 +1949,45 @@ class _TriageCardState extends State<TriageCard>
     );
   }
 }
-
 //-------------------------------------------------//27.MEDIA-CARD
 class MediaCard extends StatelessWidget {
-  final Color color;
-  
-  MediaCard({
-    required this.color,
-    super.key
+  final MediaItemEntity item;
+
+  const MediaCard({
+    required this.item,
+    super.key,
   });
-  
+
   @override
   Widget build(BuildContext context) {
+    final borderColor =
+        TriageVisualState.of(item).colorIn(context.triageColors);
+
     return Container(
       width: 400,
       height: 400,
       decoration: BoxDecoration(
-        color: color,
+        color: mediaPlaceholderColor(item.id),
         borderRadius: BorderRadius.circular(10),
-        boxShadow: [BoxShadow(
-          color: Colors.black.withValues(),
-          blurRadius: 8,
-          offset: const Offset(0, 4),
-        )],
+        border: Border.all(color: borderColor, width: 4),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.3),
+            blurRadius: 8,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
+      // Placeholder de vídeo — controles reais entram em 6.2.17 (Etapa 9).
+      child: item.isVideo
+          ? const Center(
+              child: Icon(
+                Icons.play_circle_outline,
+                size: 48,
+                color: Colors.white70,
+              ),
+            )
+          : null,
     );
   }
 }
@@ -1888,4 +2049,592 @@ class SwipeOverlay extends StatelessWidget {
       ),
     );
   }
+}
+
+//-------------------------------------------------//29.MOCK-MEDIA-ITEMS
+
+/// Placeholder até a entidade `Album` (2.2.2) entrar no domínio. Mapeia
+/// albumId → nome só para rotular os testes mockados; some quando o
+/// domínio real de álbum existir.
+abstract final class MockAlbums {
+  static const familia = 'alb-familia';
+  static const viagens = 'alb-viagens';
+  static const documentos = 'alb-documentos';
+
+  static const names = <String, String>{
+    familia: 'Família',
+    viagens: 'Viagens',
+    documentos: 'Documentos',
+  };
+}
+
+/// Dataset único de [MediaItemEntity] para a fase mockada.
+///
+/// Fonte de verdade única: `MockCategories` deriva seus totais a partir
+/// daqui, e a Tela de Triagem consome os mesmos itens por categoria. Não
+/// há números digitados à parte — evita o dashboard mostrar uma
+/// contagem que a triagem não consegue reproduzir.
+///
+/// Substituído pelo `MediaRepository` real quando o `SyncService`
+/// existir (5.2/5.3).
+abstract final class MockMediaItems {
+  static final List<MediaItemEntity> all = _build();
+
+  static String monthKey(DateTime d) =>
+      '${d.year}-${d.month.toString().padLeft(2, '0')}';
+
+  static List<MediaItemEntity> byMonth(String key) =>
+      all.where((i) => monthKey(i.dateTaken) == key).toList();
+
+  static List<MediaItemEntity> byYear(String key) =>
+      all.where((i) => i.dateTaken.year.toString() == key).toList();
+
+  static List<MediaItemEntity> byAlbum(String albumId) =>
+      all.where((i) => i.albumId == albumId).toList();
+
+  // Tipo não forma partição (6.1.5): Imagens contém Fotos e Screenshots.
+  static List<MediaItemEntity> photos() => all
+      .where((i) => i.mediaType == MediaType.image && !i.isScreenshot)
+      .toList();
+
+  static List<MediaItemEntity> screenshots() => all
+      .where((i) => i.mediaType == MediaType.image && i.isScreenshot)
+      .toList();
+
+  static List<MediaItemEntity> images() =>
+      all.where((i) => i.mediaType == MediaType.image).toList();
+
+  static List<MediaItemEntity> videos() =>
+      all.where((i) => i.mediaType == MediaType.video).toList();
+
+  /// Ponto único de resolução `CategoryRef → itens`. Usado pela Tela de
+  /// Triagem e, futuramente, pelo `TriageRepository` real como contrato
+  /// de referência. Filtra por [MediaItemEntity.isCountable] (6.1.10):
+  /// itens retidos ou indisponíveis não entram em nenhum recorte.
+  static List<MediaItemEntity> forCategory(CategoryRef ref) {
+    final items = switch (ref.granularity) {
+      CategoryGranularity.all => all,
+      CategoryGranularity.month => byMonth(ref.key),
+      CategoryGranularity.year => byYear(ref.key),
+      CategoryGranularity.album => byAlbum(ref.key),
+      CategoryGranularity.type => switch (ref.key) {
+          'photos' => photos(),
+          'screenshots' => screenshots(),
+          'images' => images(),
+          'videos' => videos(),
+          _ => const <MediaItemEntity>[],
+        },
+    };
+    return items.where((i) => i.isCountable).toList();
+  }
+
+  static int _seq = 0;
+
+  static MediaItemEntity _photo(
+    DateTime dateTaken, {
+    bool isScreenshot = false,
+    int sizeMb = 4,
+  }) {
+    _seq++;
+    return MediaItemEntity(
+      id: 'mock-$_seq',
+      mediaStoreId: 1000 + _seq,
+      fingerprint: 'fp-$_seq',
+      dateTaken: dateTaken,
+      sizeBytes: sizeMb * 1024 * 1024,
+      mimeType: isScreenshot ? 'image/png' : 'image/jpeg',
+      relativePath: isScreenshot ? 'Pictures/Screenshots' : 'DCIM/Camera',
+      mediaType: MediaType.image,
+      isScreenshot: isScreenshot,
+    );
+  }
+
+  static MediaItemEntity _video(
+    DateTime dateTaken, {
+    int sizeMb = 40,
+    int durationMs = 15000,
+  }) {
+    _seq++;
+    return MediaItemEntity(
+      id: 'mock-$_seq',
+      mediaStoreId: 1000 + _seq,
+      fingerprint: 'fp-$_seq',
+      dateTaken: dateTaken,
+      sizeBytes: sizeMb * 1024 * 1024,
+      mimeType: 'video/mp4',
+      relativePath: 'DCIM/Camera',
+      mediaType: MediaType.video,
+      isScreenshot: false,
+      durationMs: durationMs,
+    );
+  }
+
+  static List<MediaItemEntity> _build() {
+    final now = DateTime(2025, 10, 20);
+    final items = <MediaItemEntity>[];
+
+    // --- Outubro de 2025: recém-triado, quase tudo classificado ----------
+    items.addAll([
+      _photo(DateTime(2025, 10, 2, 9, 10))
+          .assignToAlbum(MockAlbums.familia, now),
+      _photo(DateTime(2025, 10, 5, 18, 40))
+          .assignToAlbum(MockAlbums.viagens, now),
+      _video(DateTime(2025, 10, 8, 20), durationMs: 32000)
+          .assignToAlbum(MockAlbums.viagens, now),
+      _photo(DateTime(2025, 10, 12, 14)).keep(now),
+      // Classificado que caiu na fila: preserva albumId (3.2.5). Testa a
+      // precedência visual (vermelho > verde, 3.3) e o fix do agregado —
+      // não deve contar nem como mantido nem como classificado (6.1.2).
+      _photo(DateTime(2025, 10, 15, 11))
+          .assignToAlbum(MockAlbums.familia, now)
+          .markForDeletion(now),
+    ]);
+
+    // --- Setembro de 2025: categoria fechada, tudo decidido ---------------
+    items.addAll([
+      _photo(DateTime(2025, 9, 3, 8))
+          .assignToAlbum(MockAlbums.documentos, now),
+      _photo(DateTime(2025, 9, 10, 19, 30)).keep(now),
+      _photo(DateTime(2025, 9, 18, 12), isScreenshot: true, sizeMb: 1)
+          .markForDeletion(now),
+      _video(DateTime(2025, 9, 22, 16, 45), durationMs: 9000).keep(now),
+      _photo(DateTime(2025, 9, 27, 10))
+          .assignToAlbum(MockAlbums.familia, now),
+    ]);
+
+    // --- Agosto de 2025: mal começado --------------------------------------
+    items.addAll([
+      _photo(DateTime(2025, 8, 1, 9)),
+      _photo(DateTime(2025, 8, 6, 17)),
+      _photo(DateTime(2025, 8, 14, 13, 20)).keep(now),
+      _video(DateTime(2025, 8, 25, 21), durationMs: 51000),
+    ]);
+
+    // --- Julho de 2025: intocado, exercita o caso 0 na barra e no anel ----
+    items.addAll([
+      _photo(DateTime(2025, 7, 2, 10), isScreenshot: true, sizeMb: 1),
+      _photo(DateTime(2025, 7, 9, 15)),
+      _photo(DateTime(2025, 7, 19, 11, 30)),
+      _video(DateTime(2025, 7, 30, 19), durationMs: 22000),
+    ]);
+
+    // --- Junho de 2025: mantidas sem álbum dominam -------------------------
+    items.addAll([
+      _photo(DateTime(2025, 6, 4, 8, 30)).keep(now),
+      _photo(DateTime(2025, 6, 11, 12)).keep(now),
+      _photo(DateTime(2025, 6, 20, 17, 40)).keep(now),
+      _photo(DateTime(2025, 6, 28, 9))
+          .assignToAlbum(MockAlbums.viagens, now),
+    ]);
+
+    // --- Maio de 2025: mix kept / classificado ------------------------------
+    items.addAll([
+      _photo(DateTime(2025, 5, 3, 10))
+          .assignToAlbum(MockAlbums.familia, now),
+      _photo(DateTime(2025, 5, 12, 14)).keep(now),
+      _video(DateTime(2025, 5, 19, 20), durationMs: 18000)
+          .assignToAlbum(MockAlbums.viagens, now),
+      _photo(DateTime(2025, 5, 26, 16)).keep(now),
+    ]);
+
+    // --- Abril de 2025: categoria minúscula, testa singular implícito ------
+    items.add(_photo(DateTime(2025, 4, 5, 9)).keep(now));
+
+    // --- Anos anteriores: variedade para a granularidade Ano ---------------
+    items.addAll([
+      _photo(DateTime(2024, 11, 3, 9))
+          .assignToAlbum(MockAlbums.documentos, now),
+      _photo(DateTime(2024, 11, 14, 13)).keep(now),
+      _video(DateTime(2024, 11, 22, 18), durationMs: 27000),
+      _photo(DateTime(2023, 3, 6, 10)),
+      _photo(DateTime(2023, 3, 21, 15, 30)).markForDeletion(now),
+    ]);
+
+    return items;
+  }
+}
+
+//-------------------------------------------------//30.TRIAGE-SESSION-NOTIFIER
+
+final triageSessionProvider = NotifierProvider.family<TriageSessionNotifier,
+    TriageSessionState, CategoryRef>(TriageSessionNotifier.new);
+
+/// Estado de triagem em memória, escopado por categoria (3.5.1 — a fila
+/// é sempre relativa à categoria ativa). Opera sobre o dataset mockado
+/// hoje; a interface pública (métodos de transição + getters de
+/// progresso, em [TriageSessionState]) é o contrato que o
+/// `TriageRepository` real (2.4.2) deve preencher depois — a Tela de
+/// Triagem não muda na troca.
+///
+/// Fora de escopo aqui: diálogo de saída com fila pendente (3.5.3 —
+/// Etapa 8).
+class TriageSessionNotifier extends Notifier<TriageSessionState> {
+  TriageSessionNotifier(this._categoryRef);
+
+  // Riverpod 3.0 fundiu FamilyNotifier em Notifier: o argumento da
+  // family chega pelo construtor, não mais por parâmetro de build().
+  final CategoryRef _categoryRef;
+
+  static const _maxUndoEntries = 40;
+
+  @override
+  TriageSessionState build() {
+    final items = MockMediaItems.forCategory(_categoryRef);
+    return TriageSessionState(
+      items: items,
+      currentIndex: _resolveInitialIndex(items),
+    );
+  }
+
+  /// 6.2.4, parcial: primeiro item não decidido; sem nenhum, primeiro
+  /// item. A parte "última posição da sessão anterior" depende de
+  /// persistência (Drift) e fica para quando o índice real existir —
+  /// não há onde gravar isso ainda.
+  static int _resolveInitialIndex(List<MediaItemEntity> items) {
+    if (items.isEmpty) return 0;
+    final firstUndecided =
+        items.indexWhere((i) => i.decision == TriageDecision.undecided);
+    return firstUndecided == -1 ? 0 : firstUndecided;
+  }
+
+  // --- Decisões (3.4) ------------------------------------------------
+
+  /// Swipe direita / Manter.
+  void keep() => _applyToCurrentAndAdvance((item, at) => item.keep(at));
+
+  /// Swipe esquerda / Excluir.
+  void markForDeletion() =>
+      _applyToCurrentAndAdvance((item, at) => item.markForDeletion(at));
+
+  /// Não altera decisão nem classificação, mas ainda é reversível
+  /// (6.2.14 lista "pular" entre as ações que o desfazer cobre) — só
+  /// que desfazê-lo apenas recua o cursor, sem restaurar nada, porque
+  /// o snapshot da entrada é idêntico ao estado atual.
+  void skip() {
+    final current = state.currentItem;
+    if (current == null) return;
+    _pushUndo(current);
+    _advance();
+  }
+
+  /// Painel de álbuns (6.2.16): toque em álbum diferente vincula e
+  /// avança; toque no álbum atual desvincula e não avança (3.2.4). Um
+  /// único método cobre as duas regras porque a UI não distingue os
+  /// casos — só sabe qual álbum foi tocado.
+  void toggleAlbum(String albumId) {
+    final current = state.currentItem;
+    if (current == null) return;
+
+    if (current.albumId == albumId) {
+      // 3.2.4: não avança.
+      _pushUndo(current);
+      _replaceCurrent(current.unassignAlbum());
+      return;
+    }
+
+    _pushUndo(current);
+    _replaceCurrent(current.assignToAlbum(albumId, DateTime.now()));
+    _advance();
+  }
+
+  /// Toque no carrossel (6.2.6). Não passa por transição de domínio e
+  /// não entra na pilha (6.2.14).
+  void jumpTo(int index) {
+    if (index < 0 || index >= state.items.length) return;
+    state = state.copyWith(currentIndex: index);
+  }
+
+  /// Ação explícita da tela de fim de fila (§7) para reabrir uma
+  /// categoria já percorrida. Só reposiciona o cursor — as decisões já
+  /// tomadas continuam intactas; existe porque "mantido" não implica
+  /// "classificado" (3.2.2) e o usuário pode querer voltar só para
+  /// classificar em álbum itens que já estão mantidos.
+  void restartFromBeginning() {
+    if (state.items.isEmpty) return;
+    state = state.copyWith(currentIndex: 0);
+  }
+
+  // --- Desfazer (6.2.14 / 6.2.15, revisado) ---------------------------
+  //
+  // Regra única, mais simples que a redação original de 6.2.15: cada
+  // entrada guarda a posição do PRÓPRIO item de origem — não uma
+  // "posição anterior" nem a "origem de um salto". Desfazer sempre
+  // devolve o cursor exatamente para onde a ação aconteceu, esperando
+  // nova decisão do usuário ali. Não importa se o item foi alcançado
+  // por avanço sequencial ou salto pelo carrossel: o resultado é o
+  // mesmo. Isto substitui a distinção sequencial/salto do texto
+  // original de 6.2.15 — atualizar o arquitetura.md.
+
+  /// Reverte a última ação: restaura decisão e álbum, e move o cursor
+  /// de volta para o item que acabou de ser revertido.
+  void undo() {
+    if (state.undoStack.isEmpty) return;
+
+    final entry = state.undoStack.last;
+    final remaining = state.undoStack.sublist(0, state.undoStack.length - 1);
+
+    final index = state.items.indexWhere((i) => i.id == entry.itemId);
+    if (index == -1) {
+      // Item não existe mais nesta sessão. Só ocorre depois que uma
+      // exclusão real (fora de escopo ainda) remover itens da lista —
+      // não há o que restaurar, só descarta a entrada.
+      state = state.copyWith(undoStack: remaining);
+      return;
+    }
+
+    final restored = state.items[index].copyWith(
+      decision: entry.previousDecision,
+      albumId: entry.previousAlbumId,
+    );
+    final items = [...state.items];
+    items[index] = restored;
+
+    state = state.copyWith(
+      items: items,
+      currentIndex: entry.anchorPosition,
+      undoStack: remaining,
+    );
+  }
+
+  /// 6.2.14 — "a pilha é zerada ao sair da categoria". Chamado no
+  /// `initState()` da Tela de Triagem, não numa saída: o notifier
+  /// sobrevive entre visitas (sem autoDispose, de propósito, para não
+  /// perder decisões), e hoje não existe um hook limpo de "saída" —
+  /// zerar na entrada tem o mesmo efeito prático.
+  void resetSessionNavigation() {
+    if (state.undoStack.isNotEmpty) {
+      state = state.copyWith(undoStack: const []);
+    }
+  }
+
+  void _pushUndo(MediaItemEntity beforeAction) {
+    final entry = UndoEntry(
+      itemId: beforeAction.id,
+      previousDecision: beforeAction.decision,
+      previousAlbumId: beforeAction.albumId,
+      anchorPosition: state.currentIndex,
+    );
+    var stack = [...state.undoStack, entry];
+    if (stack.length > _maxUndoEntries) {
+      stack = stack.sublist(stack.length - _maxUndoEntries);
+    }
+    state = state.copyWith(undoStack: stack);
+  }
+
+  void _applyToCurrentAndAdvance(
+    MediaItemEntity Function(MediaItemEntity item, DateTime at) transition,
+  ) {
+    final current = state.currentItem;
+    if (current == null) return;
+    _pushUndo(current);
+    _replaceCurrent(transition(current, DateTime.now()));
+    _advance();
+  }
+
+  void _replaceCurrent(MediaItemEntity updated) {
+    final items = [...state.items];
+    items[state.currentIndex] = updated;
+    state = state.copyWith(items: items);
+  }
+
+  void _advance() {
+    state = state.copyWith(
+      currentIndex:
+          state.hasNext ? state.currentIndex + 1 : state.items.length,
+    );
+  }
+}
+//-------------------------------------------------//31.TRIAGE-SESSION-STATE
+
+/// Estado de uma sessão de triagem: os itens da categoria ativa e o
+/// cursor. Não é o [MediaItemEntity] cru — é o recorte que a Tela de
+/// Triagem está navegando.
+class TriageSessionState {
+  const TriageSessionState({
+    required this.items,
+    required this.currentIndex,
+    this.undoStack = const [],
+  });
+
+  final List<MediaItemEntity> items;
+
+  /// Pode chegar a `items.length` — é o estado de fim da fila (§7), não
+  /// um índice inválido a ser evitado.
+  final int currentIndex;
+
+  /// 6.2.14 — limitada a 40 entradas pelo notifier. Exposta aqui para a
+  /// UI decidir se o botão de desfazer (6.2.10) fica habilitado.
+  final List<UndoEntry> undoStack;
+
+  MediaItemEntity? get currentItem =>
+      currentIndex >= 0 && currentIndex < items.length
+          ? items[currentIndex]
+          : null;
+
+  bool get hasNext => currentIndex < items.length - 1;
+
+  /// §7 — cursor passou do último item. Categoria nunca é marcada como
+  /// concluída automaticamente (3.2.7); isto é só progresso informativo
+  /// para a UI decidir mostrar o estado de conclusão.
+  bool get isAtEnd => items.isEmpty || currentIndex >= items.length;
+
+  bool get canUndo => undoStack.isNotEmpty;
+
+  int get keptCount =>
+      items.where((i) => i.decision == TriageDecision.kept).length;
+
+  /// Mesma restrição de mock_categories.dart: um item classificado que
+  /// caiu na fila (3.2.5) não conta como classificado no agregado —
+  /// 6.1.2 manda esse item para o trilho vazio.
+  int get classifiedCount => items
+      .where((i) => i.decision == TriageDecision.kept && i.albumId != null)
+      .length;
+
+  int get queueCount => items.where((i) => i.isInDeletionQueue).length;
+
+  int get totalCount => items.length;
+
+  TriageSessionState copyWith({
+    List<MediaItemEntity>? items,
+    int? currentIndex,
+    List<UndoEntry>? undoStack,
+  }) {
+    return TriageSessionState(
+      items: items ?? this.items,
+      currentIndex: currentIndex ?? this.currentIndex,
+      undoStack: undoStack ?? this.undoStack,
+    );
+  }
+}
+//-------------------------------------------------//32.MEDIA-PLACEHOLDER
+
+/// Cor determinística a partir do id do item — placeholder visual
+/// enquanto não existe miniatura real (photo_manager). Substituído
+/// quando o provider de miniatura existir; até lá, ao menos distingue
+/// itens diferentes nos testes com dados mockados.
+Color mediaPlaceholderColor(String id) {
+  final hue = (id.hashCode % 360).abs().toDouble();
+  return HSLColor.fromAHSL(1, hue, 0.35, 0.30).toColor();
+}
+
+//--------------------------------------------------//33.TRIAGE_ACTION_BAR
+
+/// Rodapé da Tela de Triagem (6.2.12). Caminho equivalente ao swipe —
+/// por isso os callbacks aqui são os mesmos métodos do notifier que o
+/// `TriageCard` já chama, não lambdas separadas.
+class TriageActionBar extends StatelessWidget {
+  const TriageActionBar({
+    required this.onDelete,
+    required this.onSkip,
+    required this.onKeep,
+    super.key,
+  });
+
+  final VoidCallback onDelete;
+  final VoidCallback onSkip;
+  final VoidCallback onKeep;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final triageColors = context.triageColors;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          _ActionButton(
+            icon: Icons.delete_outline,
+            label: 'Excluir',
+            color: triageColors.stateMarkedForDeletion,
+            onTap: onDelete,
+          ),
+          _ActionButton(
+            icon: Icons.skip_next_outlined,
+            label: 'Pular',
+            color: colors.onSurfaceVariant,
+            onTap: onSkip,
+          ),
+          _ActionButton(
+            icon: Icons.check,
+            label: 'Manter',
+            color: triageColors.stateKept,
+            onTap: onKeep,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ActionButton extends StatelessWidget {
+  const _ActionButton({
+    required this.icon,
+    required this.label,
+    required this.color,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final Color color;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+
+    return InkWell(
+      onTap: onTap,
+      customBorder: const CircleBorder(),
+      child: Padding(
+        padding: const EdgeInsets.all(8),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 56,
+              height: 56,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: color.withValues(alpha: 0.14),
+                border: Border.all(color: color, width: 1.5),
+              ),
+              child: Icon(icon, color: color, size: 26),
+            ),
+            const SizedBox(height: 6),
+            Text(label, style: text.labelSmall?.copyWith(color: color)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+//--------------------------------------------------//34.UNDO-ENTRY
+
+/// Uma entrada da pilha de desfazer.
+///
+/// `anchorPosition` é a posição do próprio item de origem da ação —
+/// não uma "posição anterior". Ao desfazer, o cursor volta exatamente
+/// para onde a ação aconteceu, independente de o item ter sido
+/// alcançado por avanço sequencial ou salto pelo carrossel. (Revisão
+/// de 6.2.15: o texto original distinguia os dois casos com âncoras
+/// diferentes; simplificado para uma regra única após teste real
+/// mostrar que voltar para uma posição anterior ao item revertido,
+/// como o texto original pedia, não fazia sentido para quem está
+/// desfazendo — a ação que motivou o desfazer foi a mais recente, e o
+/// usuário espera vê-la, não pular por cima dela.)
+class UndoEntry {
+  const UndoEntry({
+    required this.itemId,
+    required this.previousDecision,
+    required this.previousAlbumId,
+    required this.anchorPosition,
+  });
+
+  final String itemId;
+  final TriageDecision previousDecision;
+  final String? previousAlbumId;
+  final int anchorPosition;
 }
