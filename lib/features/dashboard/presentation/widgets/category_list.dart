@@ -30,11 +30,11 @@ class CategoryList extends StatelessWidget {
         return isAlbum ?
           CategoryTile.album(
             summary: summary,
-            onTap: () => context.push('/triage-page', extra: categories[index])
+            onTap: () => onCategoryTap(summary),
           ) :
           CategoryTile(
             summary: summary,
-            onTap: () => context.push('/triage-page', extra: categories[index])
+            onTap: () => onCategoryTap(summary),
           );
       },
     );
