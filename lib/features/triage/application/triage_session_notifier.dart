@@ -17,10 +17,7 @@ final triageSessionProvider = NotifierProvider.family<TriageSessionNotifier,
 /// Triagem não muda na troca.
 ///
 /// Fora de escopo aqui: diálogo de saída com fila pendente (3.5.3 —
-/// Etapa 8) e a limpeza da pilha ao "sair da categoria" (6.2.14) — não
-/// há hook de ciclo de vida limpo para isso enquanto a navegação não
-/// tiver um dono explícito; `clearUndoStack()` existe pronta para
-/// quando esse ponto for definido.
+/// Etapa 8).
 class TriageSessionNotifier extends Notifier<TriageSessionState> {
   TriageSessionNotifier(this._categoryRef);
 
@@ -29,12 +26,6 @@ class TriageSessionNotifier extends Notifier<TriageSessionState> {
   final CategoryRef _categoryRef;
 
   static const _maxUndoEntries = 40;
-
-  /// Posição do cursor imediatamente antes do último movimento (avanço
-  /// ou salto). É o que 6.2.15 chama de âncora: não é aritmético
-  /// (`currentIndex - 1`), é literalmente de onde o cursor veio — o que
-  /// distingue avanço sequencial de salto pelo carrossel.
-  int? _previousIndex;
 
   @override
   TriageSessionState build() {
@@ -72,7 +63,7 @@ class TriageSessionNotifier extends Notifier<TriageSessionState> {
   void skip() {
     final current = state.currentItem;
     if (current == null) return;
-    _pushUndo(current, anchor: _previousIndex ?? state.currentIndex);
+    _pushUndo(current);
     _advance();
   }
 
@@ -85,26 +76,22 @@ class TriageSessionNotifier extends Notifier<TriageSessionState> {
     if (current == null) return;
 
     if (current.albumId == albumId) {
-      // 3.2.4: não avança. A âncora de desfazer é a própria posição
-      // atual — não existe "posição anterior" para essa ação, porque
-      // o cursor nunca saiu daqui.
-      _pushUndo(current, anchor: state.currentIndex);
+      // 3.2.4: não avança.
+      _pushUndo(current);
       _replaceCurrent(current.unassignAlbum());
       return;
     }
 
-    _pushUndo(current, anchor: _previousIndex ?? state.currentIndex);
+    _pushUndo(current);
     _replaceCurrent(current.assignToAlbum(albumId, DateTime.now()));
     _advance();
   }
 
   /// Toque no carrossel (6.2.6). Não passa por transição de domínio e
-  /// não entra na pilha (6.2.14) — mas ainda atualiza `_previousIndex`,
-  /// porque é isso que torna a próxima ação "primeira ação após um
-  /// salto" (6.2.15).
+  /// não entra na pilha (6.2.14).
   void jumpTo(int index) {
     if (index < 0 || index >= state.items.length) return;
-    _moveCursorTo(index);
+    state = state.copyWith(currentIndex: index);
   }
 
   /// Ação explícita da tela de fim de fila (§7) para reabrir uma
@@ -114,14 +101,22 @@ class TriageSessionNotifier extends Notifier<TriageSessionState> {
   /// classificar em álbum itens que já estão mantidos.
   void restartFromBeginning() {
     if (state.items.isEmpty) return;
-    _moveCursorTo(0);
+    state = state.copyWith(currentIndex: 0);
   }
 
-  // --- Desfazer (6.2.14 / 6.2.15) -------------------------------------
+  // --- Desfazer (6.2.14 / 6.2.15, revisado) ---------------------------
+  //
+  // Regra única, mais simples que a redação original de 6.2.15: cada
+  // entrada guarda a posição do PRÓPRIO item de origem — não uma
+  // "posição anterior" nem a "origem de um salto". Desfazer sempre
+  // devolve o cursor exatamente para onde a ação aconteceu, esperando
+  // nova decisão do usuário ali. Não importa se o item foi alcançado
+  // por avanço sequencial ou salto pelo carrossel: o resultado é o
+  // mesmo. Isto substitui a distinção sequencial/salto do texto
+  // original de 6.2.15 — atualizar o arquitetura.md.
 
-  /// Reverte a última ação. Restaura decisão e álbum aos valores
-  /// anteriores e move o cursor para a âncora gravada na entrada — não
-  /// necessariamente um passo atrás (ver [UndoEntry]).
+  /// Reverte a última ação: restaura decisão e álbum, e move o cursor
+  /// de volta para o item que acabou de ser revertido.
   void undo() {
     if (state.undoStack.isEmpty) return;
 
@@ -144,23 +139,30 @@ class TriageSessionNotifier extends Notifier<TriageSessionState> {
     final items = [...state.items];
     items[index] = restored;
 
-    state = state.copyWith(items: items, undoStack: remaining);
-    _moveCursorTo(entry.anchorPosition);
+    state = state.copyWith(
+      items: items,
+      currentIndex: entry.anchorPosition,
+      undoStack: remaining,
+    );
   }
 
-  /// 6.2.14 — "a pilha é zerada ao sair da categoria". Ainda sem
-  /// chamador: falta o ponto de navegação que marca "saiu da
-  /// categoria" (Etapa 8, junto do diálogo de 3.5.3).
-  void clearUndoStack() {
-    state = state.copyWith(undoStack: const []);
+  /// 6.2.14 — "a pilha é zerada ao sair da categoria". Chamado no
+  /// `initState()` da Tela de Triagem, não numa saída: o notifier
+  /// sobrevive entre visitas (sem autoDispose, de propósito, para não
+  /// perder decisões), e hoje não existe um hook limpo de "saída" —
+  /// zerar na entrada tem o mesmo efeito prático.
+  void resetSessionNavigation() {
+    if (state.undoStack.isNotEmpty) {
+      state = state.copyWith(undoStack: const []);
+    }
   }
 
-  void _pushUndo(MediaItemEntity beforeAction, {required int anchor}) {
+  void _pushUndo(MediaItemEntity beforeAction) {
     final entry = UndoEntry(
       itemId: beforeAction.id,
       previousDecision: beforeAction.decision,
       previousAlbumId: beforeAction.albumId,
-      anchorPosition: anchor,
+      anchorPosition: state.currentIndex,
     );
     var stack = [...state.undoStack, entry];
     if (stack.length > _maxUndoEntries) {
@@ -174,7 +176,7 @@ class TriageSessionNotifier extends Notifier<TriageSessionState> {
   ) {
     final current = state.currentItem;
     if (current == null) return;
-    _pushUndo(current, anchor: _previousIndex ?? state.currentIndex);
+    _pushUndo(current);
     _replaceCurrent(transition(current, DateTime.now()));
     _advance();
   }
@@ -186,11 +188,9 @@ class TriageSessionNotifier extends Notifier<TriageSessionState> {
   }
 
   void _advance() {
-    _moveCursorTo(state.hasNext ? state.currentIndex + 1 : state.items.length);
-  }
-
-  void _moveCursorTo(int index) {
-    _previousIndex = state.currentIndex;
-    state = state.copyWith(currentIndex: index);
+    state = state.copyWith(
+      currentIndex:
+          state.hasNext ? state.currentIndex + 1 : state.items.length,
+    );
   }
 }
