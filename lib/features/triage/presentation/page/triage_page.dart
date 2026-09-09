@@ -1,82 +1,57 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:gallery_triage_app/core/domain/models/category_summary.dart';
 import 'package:gallery_triage_app/core/presentation/widgets/progress_bar.dart';
+import 'package:gallery_triage_app/features/triage/application/triage_session_notifier.dart';
 import 'package:gallery_triage_app/features/triage/presentation/widgets/media_card.dart';
 import 'package:gallery_triage_app/features/triage/presentation/widgets/triage_card.dart';
 import 'package:gallery_triage_app/features/triage/presentation/widgets/triage_carousel.dart';
 
-class TriagePage extends StatefulWidget {
+/// Sem estado próprio (2.1.2 — "Nenhum estado de triagem reside em
+/// widget"). Cursor, itens e decisões vivem em [TriageSessionNotifier];
+/// esta página só lê o estado e encaminha os callbacks de gesto/botão
+/// para os métodos do notifier.
+class TriagePage extends ConsumerWidget {
   const TriagePage({required this.category, super.key});
 
   final CategorySummary category;
 
   @override
-  State<TriagePage> createState() => _TriagePageState();
-}
-
-class _TriagePageState extends State<TriagePage> {
-
-  final List<Color> _items = const [
-    Colors.green,
-    Colors.red,
-    Colors.orange,
-    Colors.amber,
-    Colors.blueGrey,
-    Colors.indigo,
-    Colors.teal,
-    Colors.purple,
-    Colors.brown,
-    Colors.cyan,
-  ];
-
-  late int _currentIndex = _resolveInitialIndex();
-
-  int _resolveInitialIndex() => 0; // TODO: 6.2.4
-
-  bool get _hasNext => _currentIndex < _items.length - 1;
-
-  void _advance() {
-    if (_hasNext) setState(() => _currentIndex++);
-    // TODO: §7 — fim da fila da categoria quando não há próximo.
-  }
-
-  // --- Decisões (3.4) -----------------------------------------------------
-  // Swipe e botão chamam o mesmo método de propósito: são caminhos
-  // equivalentes, e lambdas duplicadas divergiriam no primeiro ajuste.
-
-  void _markForDeletion() {
-    debugPrint('EXCLUIR item $_currentIndex');
-    // TODO: gravar UndoEntry com âncora (6.2.15) e incrementar o badge.
-    _advance();
-  }
-
-  void _keep() {
-    debugPrint('MANTER item $_currentIndex');
-    _advance();
-  }
-
-  /// Não altera decisão nem classificação. Apenas move o cursor (3.2.6).
-  void _skip() => _advance();
-
-  /// Toque no carrossel. Não entra na pilha de desfazer (6.2.14), mas
-  /// define a âncora da próxima ação (6.2.15).
-  void _jumpTo(int index) {
-    setState(() => _currentIndex = index);
-  }
-
-  @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final text = Theme.of(context).textTheme;
-    final category = widget.category;
+    final provider = triageSessionProvider(category.ref);
+    final session = ref.watch(provider);
+    final notifier = ref.read(provider.notifier);
+
+    // TODO §7 (Etapa 8): estado de conclusão real, com resumo das duas
+    // métricas e ação de retorno. Isto é só o guard mínimo para não
+    // indexar `session.items` fora do intervalo quando a fila acaba ou
+    // a categoria está vazia.
+    if (session.isAtEnd) {
+      return Scaffold(
+        appBar: AppBar(title: Text(category.label)),
+        body: Center(
+          child: Text('Fila concluída', style: text.titleMedium),
+        ),
+      );
+    }
+
+    final current = session.currentItem!;
+    final nextItem =
+        session.hasNext ? session.items[session.currentIndex + 1] : null;
 
     return Scaffold(
       appBar: AppBar(
         title: Column(
           children: [
             Text(category.label),
+            // `session.totalCount` em vez de `category.totalItems`: os
+            // dois vêm do mesmo `MockMediaItems.forCategory`, mas usar o
+            // da sessão evita depender de dois caminhos de agregação
+            // ficarem sincronizados manualmente.
             Text(
-              'Item ${_currentIndex + 1} de ${category.totalItems}',
+              'Item ${session.currentIndex + 1} de ${session.totalCount}',
               style: text.bodySmall,
             ),
           ],
@@ -88,29 +63,29 @@ class _TriagePageState extends State<TriagePage> {
             padding: const EdgeInsets.symmetric(horizontal: 40),
             child: ProgressBar(
               showLegend: true,
-              totalItems: category.totalItems,
-              classifiedItems: category.classifiedItems,
-              keptItems: category.keptItems,
+              totalItems: session.totalCount,
+              classifiedItems: session.classifiedCount,
+              keptItems: session.keptCount,
             ),
           ),
           TriageCarousel(
-            items: _items,
-            currentIndex: _currentIndex,
-            onThumbTap: _jumpTo,
+            items: session.items,
+            currentIndex: session.currentIndex,
+            onThumbTap: notifier.jumpTo,
           ),
           Expanded(
             child: TriageCard(
               // Key por item: sem ela o State do card sobrevive à troca e
               // o próximo entra deslocado, onde o anterior saiu.
-              key: ValueKey(_currentIndex),
-              item: _items[_currentIndex],
-              behind: _hasNext ? MediaCard(color: _items[_currentIndex + 1]) : null,
-              onSwipeLeft: _markForDeletion,
-              onSwipeRight: _keep,
+              key: ValueKey(current.id),
+              item: current,
+              behind: nextItem != null ? MediaCard(item: nextItem) : null,
+              onSwipeLeft: notifier.markForDeletion,
+              onSwipeRight: notifier.keep,
             ),
           ),
-          // TODO: TriageActionBar(onDelete:, onSkip:, onKeep:) — 6.2.12.
-          // Enquanto não existe, _skip fica sem chamador.
+          // TODO: TriageActionBar(onDelete:, onSkip:, onKeep:) — 6.2.12,
+          // Etapa 4. Até lá, notifier.skip() fica sem chamador.
         ],
       ),
     );
