@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:gallery_triage_app/core/domain/entities/media_item_entity.dart';
 
 import 'carousel_thumb.dart';
 
 class TriageCarousel extends StatelessWidget {
-  final List<Color> items;
+  final List<MediaItemEntity> items;
   final int currentIndex;
   final ValueChanged<int> onThumbTap;
 
@@ -25,8 +26,7 @@ class TriageCarousel extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 16),
         itemBuilder: (context, index) {
           return CarouselThumb(
-            color: items[index],
-            index: currentIndex,
+            item: items[index],
             isActive: index == currentIndex,
             onTap: () => onThumbTap(index),
           );
