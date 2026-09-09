@@ -2,11 +2,12 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/physics.dart';
+import 'package:gallery_triage_app/core/domain/entities/media_item_entity.dart';
 import 'package:gallery_triage_app/features/triage/presentation/widgets/media_card.dart';
 import 'package:gallery_triage_app/features/triage/presentation/widgets/swipe_overlay.dart';
 
 class TriageCard extends StatefulWidget {
-  final Color item;
+  final MediaItemEntity item;
   final VoidCallback onSwipeLeft;
   final VoidCallback onSwipeRight;
 
@@ -128,7 +129,7 @@ class _TriageCardState extends State<TriageCard>
           animation: _controller,
           // Fora do builder: a árvore da mídia não reconstrói a cada
           // frame de mola nem de arrasto, só o Transform.
-          child: MediaCard(color: widget.item),
+          child: MediaCard(item: widget.item),
           builder: (context, child) {
             final progress = _progress;
 
