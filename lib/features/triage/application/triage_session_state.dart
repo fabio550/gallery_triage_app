@@ -1,5 +1,6 @@
 import 'package:gallery_triage_app/core/domain/entities/media_item_entity.dart';
 import 'package:gallery_triage_app/core/domain/enums/triage_decision.dart';
+import 'package:gallery_triage_app/features/triage/application/undo_entry.dart';
 
 /// Estado de uma sessão de triagem: os itens da categoria ativa e o
 /// cursor. Não é o [MediaItemEntity] cru — é o recorte que a Tela de
@@ -8,6 +9,7 @@ class TriageSessionState {
   const TriageSessionState({
     required this.items,
     required this.currentIndex,
+    this.undoStack = const [],
   });
 
   final List<MediaItemEntity> items;
@@ -15,6 +17,10 @@ class TriageSessionState {
   /// Pode chegar a `items.length` — é o estado de fim da fila (§7), não
   /// um índice inválido a ser evitado.
   final int currentIndex;
+
+  /// 6.2.14 — limitada a 40 entradas pelo notifier. Exposta aqui para a
+  /// UI decidir se o botão de desfazer (6.2.10) fica habilitado.
+  final List<UndoEntry> undoStack;
 
   MediaItemEntity? get currentItem =>
       currentIndex >= 0 && currentIndex < items.length
@@ -27,6 +33,8 @@ class TriageSessionState {
   /// concluída automaticamente (3.2.7); isto é só progresso informativo
   /// para a UI decidir mostrar o estado de conclusão.
   bool get isAtEnd => items.isEmpty || currentIndex >= items.length;
+
+  bool get canUndo => undoStack.isNotEmpty;
 
   int get keptCount =>
       items.where((i) => i.decision == TriageDecision.kept).length;
@@ -45,10 +53,12 @@ class TriageSessionState {
   TriageSessionState copyWith({
     List<MediaItemEntity>? items,
     int? currentIndex,
+    List<UndoEntry>? undoStack,
   }) {
     return TriageSessionState(
       items: items ?? this.items,
       currentIndex: currentIndex ?? this.currentIndex,
+      undoStack: undoStack ?? this.undoStack,
     );
   }
 }
