@@ -20,12 +20,12 @@
 //---20.TOTAL-ITEMS-INFO
 //---21.DASHBOARD-PAGE
 //---22.MOCK-CATEGORIES
-//---23.TRIAGE-PAGE
+//---23.TRIAGE-PAGE************************
 //---24.TRIAGE-CAROUSEL
 //---25.CAROUSEL-THUMB
-//---26.TRIAGE-CARD
+//---26.TRIAGE-CARD************************
 //---27.MEDIA-CARD
-//---28.SWIPE-OVERLAY
+//---28.SWIPE-OVERLAY************************
 //---29.MOCK-MEDIA-ITEMS
 //---30.TRIAGE-SESSION-NOTIFIER
 //---31.TRIAGE-SESSION-STATE
@@ -38,6 +38,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'dart:math' as math;
 import 'package:flutter/physics.dart';
+import 'package:flutter/gestures.dart' show kTouchSlop;
 //-------------------------------------------------//2.MAIN
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -1512,21 +1513,63 @@ abstract final class MockCategories {
 }
 //-------------------------------------------------//23.TRIAGE-PAGE
 
-/// Sem estado próprio (2.1.2 — "Nenhum estado de triagem reside em
-/// widget"). Cursor, itens e decisões vivem em [TriageSessionNotifier];
-/// esta página só lê o estado e encaminha os callbacks de gesto/botão
-/// para os métodos do notifier.
-class TriagePage extends ConsumerWidget {
+/// Sem estado próprio de triagem (2.1.2 — "Nenhum estado de triagem
+/// reside em widget"). Cursor, itens e decisões vivem em
+/// [TriageSessionNotifier]; esta página só lê o estado e encaminha os
+/// callbacks de gesto/botão para os métodos do notifier.
+///
+/// É `ConsumerStatefulWidget` só pelo `initState()`: é o hook que
+/// dispara `resetSessionNavigation()` ao entrar na categoria (ver nota
+/// no notifier) — não guarda nenhum estado de triagem em si.
+class TriagePage extends ConsumerStatefulWidget {
   const TriagePage({required this.category, super.key});
 
   final CategorySummary category;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<TriagePage> createState() => _TriagePageState();
+}
+
+class _TriagePageState extends ConsumerState<TriagePage> {
+  @override
+  void initState() {
+    super.initState();
+    // Uma vez por entrada na tela, não a cada rebuild — por isso mora
+    // aqui e não no build().
+    Future.microtask(
+      () => ref
+          .read(triageSessionProvider(widget.category.ref).notifier)
+          .resetSessionNavigation(),
+    );
+  }
+
+  /// Segundo ponto de entrada do painel (6.2.16) — o primeiro é o
+  /// swipe para baixo, já cablado no TriageCard. Os dois convergem
+  /// aqui: abrir o painel, e se algo foi escolhido (existente ou
+  /// recém-criado), delegar pro mesmo `toggleAlbum` que a vinculação
+  /// por toque já usa.
+  Future<void> _openAlbumPanel(String? currentAlbumId) async {
+    final selectedAlbumId = await showAlbumPanel(
+      context,
+      currentAlbumId: currentAlbumId,
+    );
+    if (selectedAlbumId == null || !mounted) return;
+    ref
+        .read(triageSessionProvider(widget.category.ref).notifier)
+        .toggleAlbum(selectedAlbumId);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final category = widget.category;
     final text = Theme.of(context).textTheme;
     final provider = triageSessionProvider(category.ref);
     final session = ref.watch(provider);
     final notifier = ref.read(provider.notifier);
+
+    final lastUsedAlbumId = ref.watch(lastUsedAlbumProvider);
+    final lastUsedAlbumLabel =
+        lastUsedAlbumId == null ? null : MockAlbums.names[lastUsedAlbumId];
 
     // TODO §7 (Etapa 8): estado de conclusão real, com resumo das duas
     // métricas e ação de retorno ao dashboard. Por ora, só o botão que
@@ -1599,6 +1642,9 @@ class TriagePage extends ConsumerWidget {
                   behind: nextItem != null ? MediaCard(item: nextItem) : null,
                   onSwipeLeft: notifier.markForDeletion,
                   onSwipeRight: notifier.keep,
+                  onSwipeUp: notifier.classifyWithLastUsedAlbum,
+                  onSwipeDown: () => _openAlbumPanel(current.albumId),
+                  lastUsedAlbumLabel: lastUsedAlbumLabel,
                 ),
                 // Overlay topo-esquerdo (6.2.10). Desabilitado com a
                 // pilha vazia — `onPressed: null` já cobre isso, sem
@@ -1612,7 +1658,67 @@ class TriagePage extends ConsumerWidget {
                     onPressed: session.canUndo ? notifier.undo : null,
                   ),
                 ),
+                // Pílula de último álbum (6.2.18) — affordance sempre
+                // visível, distinta do feedback de arrasto (que só
+                // aparece dentro do TriageCard durante o gesto).
+                if (lastUsedAlbumLabel != null)
+                  Positioned(
+                    top: 8,
+                    left: 0,
+                    right: 0,
+                    child: Center(
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.55),
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 6,
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(
+                                Icons.arrow_upward,
+                                size: 14,
+                                color: Colors.white,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                lastUsedAlbumLabel,
+                                style: text.labelSmall
+                                    ?.copyWith(color: Colors.white),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
               ],
+            ),
+          ),
+          // Alça no rodapé (6.2.16) — segundo ponto de entrada do
+          // painel, equivalente ao swipe para baixo.
+          GestureDetector(
+            onTap: () => _openAlbumPanel(current.albumId),
+            behavior: HitTestBehavior.opaque,
+            child: const Padding(
+              padding: EdgeInsets.symmetric(vertical: 6),
+              child: Center(
+                child: SizedBox(
+                  width: 32,
+                  height: 4,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: Colors.white24,
+                      borderRadius: BorderRadius.all(Radius.circular(2)),
+                    ),
+                  ),
+                ),
+              ),
             ),
           ),
           TriageActionBar(
@@ -1784,10 +1890,26 @@ class CarouselThumb extends StatelessWidget {
 }
 //-------------------------------------------------//26.TRIAGE-CARD
 
+enum _DragAxis { none, horizontal, vertical }
+
 class TriageCard extends StatefulWidget {
   final MediaItemEntity item;
   final VoidCallback onSwipeLeft;
   final VoidCallback onSwipeRight;
+
+  /// Swipe para cima (6.2.9): classifica em `lastUsedAlbumId`. Inerte
+  /// enquanto [lastUsedAlbumLabel] for nulo — o card volta à origem sem
+  /// chamar isto.
+  final VoidCallback onSwipeUp;
+
+  /// Swipe para baixo (6.2.9): abre o painel de álbuns. Sem limiar de
+  /// confirmação (6.2.18) — qualquer soltura no eixo vertical-baixo
+  /// chama isto.
+  final VoidCallback onSwipeDown;
+
+  /// Nome do álbum armado em `lastUsedAlbumId`, para o feedback do
+  /// swipe para cima. Nulo = pílula não renderizada e gesto inerte.
+  final String? lastUsedAlbumLabel;
 
   /// Card de baixo da pilha. Opcional: sem ele o efeito continua, só
   /// perde a sensação de profundidade.
@@ -1797,6 +1919,9 @@ class TriageCard extends StatefulWidget {
     required this.item,
     required this.onSwipeLeft,
     required this.onSwipeRight,
+    required this.onSwipeUp,
+    required this.onSwipeDown,
+    required this.lastUsedAlbumLabel,
     this.behind,
     super.key,
   });
@@ -1812,20 +1937,24 @@ class _TriageCardState extends State<TriageCard>
   Offset _dragEndPosition = Offset.zero;
   Offset _position = Offset.zero;
 
+  /// Acumulado desde o `onPanStart`, sem amortecimento — só serve para
+  /// decidir o eixo contra `kTouchSlop` (6.2.18). Depois que o eixo
+  /// trava, quem move o card é `_position`.
+  Offset _rawAccumulated = Offset.zero;
+  _DragAxis _axis = _DragAxis.none;
+
   final double _maxRotationDegrees = 15;
 
-  /// Deslocamento em que a rotação satura. Não limita a translação: o
-  /// card segue o dedo sem parede, só o ângulo é normalizado.
+  /// Deslocamento em que a rotação satura. Só se aplica ao eixo
+  /// horizontal — rotação em drag vertical não faz sentido físico.
   double get _rotationSpan => MediaQuery.sizeOf(context).width * 0.5;
 
-  /// Fração do delta vertical que o card acompanha. Y com o mesmo peso
-  /// do X deixa o card escorregadio e tira a tendência horizontal, que é
-  /// onde estão as duas decisões.
-  static const double _verticalDamping = 0.25;
-  
-  static const double _commitFraction = 0.30;   // 30% da largura
-  static const double _commitVelocity = 700.0;  // px/s 
-  
+  double get _verticalSpan => MediaQuery.sizeOf(context).height * 0.5;
+
+  static const double _horizontalCommitFraction = 0.30; // 30% da largura
+  static const double _verticalCommitFraction = 0.25; // 25% da altura
+  static const double _commitVelocity = 700.0; // px/s, os dois eixos
+
   @override
   void initState() {
     super.initState();
@@ -1863,14 +1992,21 @@ class _TriageCardState extends State<TriageCard>
       SpringSimulation(spring, 0, 1, travel == 0 ? 0 : projected / travel),
     );
   }
-  
-  Future<void> _exit(bool toRight) async {
+
+  void _exit(VoidCallback callback) {
     _runSpringAnimation(Velocity.zero);
-    (toRight ? widget.onSwipeRight : widget.onSwipeLeft)();
+    callback();
   }
-  
-  double get _progress =>
-      (_position.dx / _rotationSpan).clamp(-1.0, 1.0);
+
+  /// -1 (esquerda) .. 1 (direita). Zero fora do eixo horizontal.
+  double get _horizontalProgress => _axis == _DragAxis.horizontal
+      ? (_position.dx / _rotationSpan).clamp(-1.0, 1.0)
+      : 0.0;
+
+  /// -1 (cima) .. 1 (baixo). Zero fora do eixo vertical.
+  double get _verticalProgress => _axis == _DragAxis.vertical
+      ? (_position.dy / _verticalSpan).clamp(-1.0, 1.0)
+      : 0.0;
 
   @override
   Widget build(BuildContext context) {
@@ -1878,30 +2014,76 @@ class _TriageCardState extends State<TriageCard>
 
     return Center(
       child: GestureDetector(
-        onPanStart: (_) => _controller.stop(),
+        onPanStart: (_) {
+          _controller.stop();
+          _axis = _DragAxis.none;
+          _rawAccumulated = Offset.zero;
+        },
         onPanUpdate: (details) {
+          // Eixo ainda não decidido: só acumula, não move o card. Área
+          // de reconhecimento (carrossel, AppBar etc.) fica de fora
+          // porque o GestureDetector cobre só o card (6.2.18).
+          if (_axis == _DragAxis.none) {
+            _rawAccumulated += details.delta;
+            if (_rawAccumulated.distance <= kTouchSlop) return;
+
+            _axis = _rawAccumulated.dx.abs() >= _rawAccumulated.dy.abs()
+                ? _DragAxis.horizontal
+                : _DragAxis.vertical;
+            // Decidido, trava até o pointerUp — não há caminho de volta
+            // para _DragAxis.none dentro do mesmo gesto.
+          }
+
           setState(() {
-            _position += Offset(
-              details.delta.dx,
-              details.delta.dy * _verticalDamping,
-            );
+            _position += _axis == _DragAxis.horizontal
+                ? Offset(details.delta.dx, 0)
+                : Offset(0, details.delta.dy);
           });
         },
         onPanEnd: (details) {
-          final width = MediaQuery.sizeOf(context).width;
-          final vx = details.velocity.pixelsPerSecond.dx;
+          final size = MediaQuery.sizeOf(context);
+          final velocity = details.velocity.pixelsPerSecond;
 
-          final passedDistance = _position.dx.abs() > width * _commitFraction;
-          final passedVelocity = vx.abs() > _commitVelocity;
+          if (_axis == _DragAxis.horizontal) {
+            final passedDistance =
+                _position.dx.abs() > size.width * _horizontalCommitFraction;
+            final passedVelocity = velocity.dx.abs() > _commitVelocity;
 
-          if (passedDistance || passedVelocity) {
-            // A velocidade tem prioridade: num flick rápido o dedo sai antes de
-            // percorrer a distância, e o sinal dela é a intenção real.
-            final toRight = passedVelocity ? vx > 0 : _position.dx > 0;
-            _exit(toRight);
-          } else {
-            _runSpringAnimation(details.velocity);
+            if (passedDistance || passedVelocity) {
+              // A velocidade tem prioridade: num flick rápido o dedo sai
+              // antes de percorrer a distância, e o sinal dela é a
+              // intenção real.
+              final toRight = passedVelocity ? velocity.dx > 0 : _position.dx > 0;
+              _exit(toRight ? widget.onSwipeRight : widget.onSwipeLeft);
+              return;
+            }
+          } else if (_axis == _DragAxis.vertical) {
+            final movingUp = _position.dy < 0;
+
+            if (movingUp) {
+              // Inerte sem álbum armado (6.2.18) — cai no spring-back
+              // abaixo em vez de tentar confirmar.
+              if (widget.lastUsedAlbumLabel != null) {
+                final passedDistance = _position.dy.abs() >
+                    size.height * _verticalCommitFraction;
+                final passedVelocity =
+                    velocity.dy < 0 && velocity.dy.abs() > _commitVelocity;
+
+                if (passedDistance || passedVelocity) {
+                  _exit(widget.onSwipeUp);
+                  return;
+                }
+              }
+            } else {
+              // Baixo: sem limiar de confirmação (6.2.18) — o gesto não
+              // altera decisão nem classificação, então qualquer soltura
+              // no eixo abre o painel.
+              _exit(widget.onSwipeDown);
+              return;
+            }
           }
+
+          _runSpringAnimation(details.velocity);
         },
         child: AnimatedBuilder(
           animation: _controller,
@@ -1909,7 +2091,11 @@ class _TriageCardState extends State<TriageCard>
           // frame de mola nem de arrasto, só o Transform.
           child: MediaCard(item: widget.item),
           builder: (context, child) {
-            final progress = _progress;
+            final horizontalProgress = _horizontalProgress;
+            final verticalProgress = _verticalProgress;
+            final combinedProgress = _axis == _DragAxis.horizontal
+                ? horizontalProgress.abs()
+                : verticalProgress.abs();
 
             return Stack(
               alignment: Alignment.center,
@@ -1918,7 +2104,7 @@ class _TriageCardState extends State<TriageCard>
                   Transform.scale(
                     // Cresce conforme o card de cima se afasta: é o que
                     // vende a sensação de pilha.
-                    scale: 0.92 + 0.08 * progress.abs(),
+                    scale: 0.92 + 0.08 * combinedProgress,
                     child: Opacity(opacity: 0.6, child: widget.behind),
                   ),
                 Transform(
@@ -1928,7 +2114,11 @@ class _TriageCardState extends State<TriageCard>
                   // o movimento horizontal virava diagonal.
                   transform: Matrix4.identity()
                     ..translateByDouble(_position.dx, _position.dy, 0, 1)
-                    ..rotateZ(progress * _maxRotationDegrees * math.pi / 180),
+                    ..rotateZ(
+                      // Só o eixo horizontal gira — rotação num drag
+                      // vertical não tem correspondência física aqui.
+                      horizontalProgress * _maxRotationDegrees * math.pi / 180,
+                    ),
                   // Pivô bem abaixo da tela. Girar na base do próprio
                   // card produz tombo; o eixo distante produz pêndulo.
                   origin: Offset(0, height * 0.6),
@@ -1937,7 +2127,11 @@ class _TriageCardState extends State<TriageCard>
                     fit: StackFit.passthrough,
                     children: [
                       child!,
-                      SwipeOverlay(progress: progress),
+                      SwipeOverlay(
+                        horizontalProgress: horizontalProgress,
+                        verticalProgress: verticalProgress,
+                        lastUsedAlbumLabel: widget.lastUsedAlbumLabel,
+                      ),
                     ],
                   ),
                 ),
@@ -1999,22 +2193,73 @@ class MediaCard extends StatelessWidget {
 /// confundido em deuteranopia, então a direção nunca é comunicada só por
 /// cor.
 
+/// Lavagem de cor com ícone e rótulo, opacidade proporcional ao
+/// deslocamento. O texto não é decoração: vermelho e verde são o par
+/// mais confundido em deuteranopia, então a direção nunca é comunicada
+/// só por cor — vale para as 4 direções (6.2.18), não só esquerda/
+/// direita. Só uma fica ativa por vez, já que o eixo é travado no
+/// TriageCard.
 class SwipeOverlay extends StatelessWidget {
   const SwipeOverlay({
-    required this.progress,
+    required this.horizontalProgress,
+    required this.verticalProgress,
+    required this.lastUsedAlbumLabel,
     super.key,
   });
 
-  final double progress;
+  /// -1 (esquerda/excluir) .. 1 (direita/manter).
+  final double horizontalProgress;
+
+  /// -1 (cima/classificar) .. 1 (baixo/abrir painel).
+  final double verticalProgress;
+
+  /// Nome do álbum armado em `lastUsedAlbumId`. Nulo = sem feedback de
+  /// swipe para cima — o gesto está inerte (6.2.18).
+  final String? lastUsedAlbumLabel;
 
   @override
   Widget build(BuildContext context) {
-    final opacity = progress.abs();
-    if (opacity <= 0.02) return const SizedBox.shrink();
+    if (horizontalProgress.abs() > 0.02) {
+      final toRight = horizontalProgress > 0;
+      return _overlay(
+        context,
+        opacity: horizontalProgress.abs(),
+        color: toRight ? const Color(0xFF4C8DFF) : const Color(0xFFF2554B),
+        icon: toRight ? Icons.check : Icons.delete_outline,
+        label: toRight ? 'Manter' : 'Excluir',
+      );
+    }
 
-    final toRight = progress > 0;
-    final color = toRight ? const Color(0xFF4C8DFF) : const Color(0xFFF2554B);
+    if (verticalProgress < -0.02 && lastUsedAlbumLabel != null) {
+      return _overlay(
+        context,
+        opacity: verticalProgress.abs(),
+        color: const Color(0xFF3DAA6B),
+        icon: Icons.photo_album_outlined,
+        label: lastUsedAlbumLabel!,
+      );
+    }
 
+    if (verticalProgress > 0.02) {
+      return _overlay(
+        context,
+        opacity: verticalProgress,
+        color: const Color(0xFF808080),
+        icon: Icons.expand_more,
+        label: 'Álbuns',
+      );
+    }
+
+    return const SizedBox.shrink();
+  }
+
+  Widget _overlay(
+    BuildContext context, {
+    required double opacity,
+    required Color color,
+    required IconData icon,
+    required String label,
+  }) {
     return Positioned.fill(
       child: IgnorePointer(
         child: DecoratedBox(
@@ -2028,14 +2273,10 @@ class SwipeOverlay extends StatelessWidget {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(
-                    toRight ? Icons.check : Icons.delete_outline,
-                    size: 44,
-                    color: Colors.white,
-                  ),
+                  Icon(icon, size: 44, color: Colors.white),
                   const SizedBox(height: 8),
                   Text(
-                    toRight ? 'Manter' : 'Excluir',
+                    label,
                     style: Theme.of(context)
                         .textTheme
                         .titleMedium
@@ -2326,11 +2567,30 @@ class TriageSessionNotifier extends Notifier<TriageSessionState> {
     if (current == null) return;
 
     if (current.albumId == albumId) {
-      // 3.2.4: não avança.
+      // 3.2.4: não avança, e esta ação NÃO grava lastUsedAlbumId
+      // (6.2.16 — só a vinculação a um álbum diferente grava).
       _pushUndo(current);
       _replaceCurrent(current.unassignAlbum());
       return;
     }
+
+    _pushUndo(current);
+    _replaceCurrent(current.assignToAlbum(albumId, DateTime.now()));
+    _advance();
+    ref.read(lastUsedAlbumProvider.notifier).set(albumId);
+  }
+
+  /// Swipe para cima (6.2.9/6.2.18): classifica direto no álbum de
+  /// `lastUsedAlbumId`, sem abrir o painel. Inerte se não houver
+  /// nenhum álbum armado ainda — a UI decide se deixa o gesto chegar
+  /// aqui (a pílula não é renderizada com `lastUsedAlbumId` nulo), mas
+  /// o notifier também é defensivo.
+  void classifyWithLastUsedAlbum() {
+    final albumId = ref.read(lastUsedAlbumProvider);
+    if (albumId == null) return;
+
+    final current = state.currentItem;
+    if (current == null) return;
 
     _pushUndo(current);
     _replaceCurrent(current.assignToAlbum(albumId, DateTime.now()));
@@ -2668,3 +2928,267 @@ class LastUsedAlbumNotifier extends Notifier<String?> {
     if (state == albumId) state = null;
   }
 }
+//--------------------------------------------------//37.ALBUM-ENTITY
+
+/// Album (2.2.2). Versão mínima: sem `externalRef` ainda, já que
+/// estágios 2 e 3 (1.3.2/1.3.3) não existem nesta fase mockada.
+class AlbumEntity {
+  const AlbumEntity({
+    required this.id,
+    required this.name,
+    required this.createdAt,
+  });
+
+  final String id;
+  final String name;
+  final DateTime createdAt;
+}
+//--------------------------------------------------//38.ALBUMS-PROVIDER
+
+/// Nome de álbum inválido ou duplicado (7 — "erro inline no campo, sem
+/// fechar o diálogo").
+class AlbumNameException implements Exception {
+  const AlbumNameException(this.message);
+  final String message;
+}
+
+final albumsProvider =
+    NotifierProvider<AlbumsNotifier, List<AlbumEntity>>(AlbumsNotifier.new);
+
+/// Registro global de álbuns — não escopado por categoria, como o
+/// próprio conceito de álbum (2.2.2). Em memória por enquanto; migra
+/// para o índice local quando o Drift existir.
+///
+/// Semeado com os 3 álbuns de [MockAlbums] para manter os `albumId` já
+/// gravados em `mock_media_items.dart` válidos. Álbuns criados pelo
+/// painel (6.2.16) entram aqui, não em [MockAlbums] — aquele mapa fica
+/// só como lookup do dataset original.
+class AlbumsNotifier extends Notifier<List<AlbumEntity>> {
+  @override
+  List<AlbumEntity> build() {
+    final seedDate = DateTime(2025, 1, 1);
+    return [
+      AlbumEntity(id: MockAlbums.familia, name: 'Família', createdAt: seedDate),
+      AlbumEntity(id: MockAlbums.viagens, name: 'Viagens', createdAt: seedDate),
+      AlbumEntity(
+        id: MockAlbums.documentos,
+        name: 'Documentos',
+        createdAt: seedDate,
+      ),
+    ];
+  }
+
+  /// Regras de 6.5.3, antecipadas aqui porque o painel (6.2.16) já cria
+  /// álbum pela via rápida, antes de existir a tela de gestão em si.
+  /// Retorna o id do álbum criado.
+  String create(String rawName) {
+    final name = rawName.trim();
+
+    if (name.isEmpty) {
+      throw const AlbumNameException('Digite um nome para o álbum.');
+    }
+    if (name.length > 64) {
+      throw const AlbumNameException('Nome muito longo (máximo 64 caracteres).');
+    }
+    if (RegExp(r'[/\\:*?"<>|]').hasMatch(name)) {
+      throw const AlbumNameException('Nome não pode conter / \\ : * ? " < > |');
+    }
+    final duplicate =
+        state.any((a) => a.name.toLowerCase() == name.toLowerCase());
+    if (duplicate) {
+      throw const AlbumNameException('Já existe um álbum com esse nome.');
+    }
+
+    final album = AlbumEntity(
+      id: 'album-${DateTime.now().microsecondsSinceEpoch}',
+      name: name,
+      createdAt: DateTime.now(),
+    );
+    state = [...state, album];
+    return album.id;
+  }
+}
+
+//--------------------------------------------------//39.ALBUM-PANEL
+
+/// Bottom sheet de 6.2.16. Devolve o id do álbum escolhido (existente
+/// ou recém-criado) via `Navigator.pop`, ou `null` se fechado sem
+/// seleção. Quem chama decide o que fazer com o id — este widget não
+/// conhece `TriageSessionNotifier`.
+Future<String?> showAlbumPanel(BuildContext context, {String? currentAlbumId}) {
+  return showModalBottomSheet<String>(
+    context: context,
+    isScrollControlled: true,
+    builder: (_) => AlbumPanel(currentAlbumId: currentAlbumId),
+  );
+}
+
+class AlbumPanel extends ConsumerStatefulWidget {
+  const AlbumPanel({required this.currentAlbumId, super.key});
+
+  final String? currentAlbumId;
+
+  @override
+  ConsumerState<AlbumPanel> createState() => _AlbumPanelState();
+}
+
+class _AlbumPanelState extends ConsumerState<AlbumPanel> {
+  final _searchController = TextEditingController();
+  String _query = '';
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  /// Contagem global por álbum. Nota: soma sobre o dataset mockado
+  /// original (`MockMediaItems.all`), não sobre nenhuma sessão de
+  /// triagem em memória — cada categoria mantém sua própria cópia
+  /// mutada dos itens (Etapa 2), então mudanças feitas na sessão atual
+  /// só aparecem aqui depois que existir um índice único de verdade
+  /// (Drift). Aceitável para a fase mockada; documentado, não
+  /// escondido.
+  Map<String, int> _counts() {
+    final counts = <String, int>{};
+    for (final item in MockMediaItems.all) {
+      final id = item.albumId;
+      if (id == null) continue;
+      counts[id] = (counts[id] ?? 0) + 1;
+    }
+    return counts;
+  }
+
+  /// 6.2.16 — com itens por contagem decrescente, depois vazios em
+  /// ordem alfabética.
+  List<AlbumEntity> _ordered(List<AlbumEntity> albums, Map<String, int> counts) {
+    final filtered = _query.isEmpty
+        ? albums
+        : albums
+            .where((a) => a.name.toLowerCase().contains(_query.toLowerCase()))
+            .toList();
+
+    final withItems = filtered.where((a) => (counts[a.id] ?? 0) > 0).toList()
+      ..sort((a, b) {
+        final byCount = (counts[b.id] ?? 0).compareTo(counts[a.id] ?? 0);
+        return byCount != 0 ? byCount : a.name.compareTo(b.name);
+      });
+    final empty = filtered.where((a) => (counts[a.id] ?? 0) == 0).toList()
+      ..sort((a, b) => a.name.compareTo(b.name));
+
+    return [...withItems, ...empty];
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final albums = ref.watch(albumsProvider);
+    final counts = _counts();
+    final ordered = _ordered(albums, counts);
+
+    return SafeArea(
+      child: Padding(
+        padding: EdgeInsets.only(
+          left: 16,
+          right: 16,
+          top: 16,
+          // Sobe o painel acima do teclado ao focar a busca.
+          bottom: 16 + MediaQuery.viewInsetsOf(context).bottom,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: _searchController,
+              onChanged: (value) => setState(() => _query = value),
+              decoration: const InputDecoration(
+                hintText: 'Buscar álbum',
+                prefixIcon: Icon(Icons.search),
+                isDense: true,
+              ),
+            ),
+            const SizedBox(height: 8),
+            ConstrainedBox(
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.sizeOf(context).height * 0.5,
+              ),
+              child: ListView(
+                shrinkWrap: true,
+                children: [
+                  // Primeiro item da lista, sempre — mesmo com busca
+                  // ativa e álbuns vazios (7 — "estado vazio, primeira
+                  // sessão: apenas Criar Álbum").
+                  ListTile(
+                    leading: const CircleAvatar(child: Icon(Icons.add)),
+                    title: const Text('Criar Álbum'),
+                    onTap: () => _createAlbum(context),
+                  ),
+                  for (final album in ordered)
+                    ListTile(
+                      leading: CircleAvatar(
+                        backgroundColor: mediaPlaceholderColor(album.id),
+                      ),
+                      title: Text(album.name),
+                      trailing: Text('${counts[album.id] ?? 0}'),
+                      selected: album.id == widget.currentAlbumId,
+                      onTap: () => Navigator.of(context).pop(album.id),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _createAlbum(BuildContext sheetContext) async {
+    final nameController = TextEditingController();
+    String? errorText;
+
+    final createdId = await showDialog<String>(
+      context: sheetContext,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
+          title: const Text('Criar álbum'),
+          content: TextField(
+            controller: nameController,
+            autofocus: true,
+            decoration: InputDecoration(
+              hintText: 'Nome do álbum',
+              errorText: errorText,
+            ),
+            // Erro inline, sem fechar o diálogo (7).
+            onSubmitted: (_) => setDialogState(() {}),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton(
+              onPressed: () {
+                try {
+                  final id = ref
+                      .read(albumsProvider.notifier)
+                      .create(nameController.text);
+                  Navigator.of(dialogContext).pop(id);
+                } on AlbumNameException catch (e) {
+                  setDialogState(() => errorText = e.message);
+                }
+              },
+              child: const Text('Criar'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (createdId != null && sheetContext.mounted) {
+      // Fecha o painel inteiro com o id do álbum recém-criado — quem
+      // chamou showAlbumPanel trata os dois casos (existente ou novo)
+      // do mesmo jeito.
+      Navigator.of(sheetContext).pop(createdId);
+    }
+  }
+}
+
