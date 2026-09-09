@@ -53,7 +53,7 @@ class _DashboardPageState extends State<DashboardPage> {
               child: CategoryList(
                 categories: categories,
                 granularity: _granularity,
-                onCategoryTap: (summary) => debugPrint(summary.ref.key),
+                onCategoryTap: (summary) => context.push('/triage-page', extra: summary),
               ),
             ),
           ),
