@@ -177,6 +177,89 @@ class TriageSessionNotifier extends Notifier<TriageSessionState> {
     }
   }
 
+  // --- Tela de Revisão da Lixeira (6.3) -------------------------------
+  //
+  // Nada aqui entra na pilha de desfazer — 6.2.14 é explícito:
+  // "Desmarcar item na Tela de Revisão não entra na pilha da Triagem."
+  // E nada disso move o cursor da Triagem: a Revisão é uma tela à
+  // parte, olhando pro mesmo `state.items` por id.
+
+  /// Alterna um item entre selecionado para remoção e restaurado
+  /// (6.3.4). Restaurar usa `preQueueDecision`/`preQueueAlbumId` —
+  /// mesmo mecanismo de 3.5.3/5.4.1, não uma restauração inventada
+  /// aqui.
+  void toggleQueueMembership(String itemId) {
+    final index = state.items.indexWhere((i) => i.id == itemId);
+    if (index == -1) return;
+
+    final item = state.items[index];
+    final updated = item.isInDeletionQueue
+        ? item.restoreFromQueue()
+        : item.markForDeletion(DateTime.now());
+
+    final items = [...state.items];
+    items[index] = updated;
+    state = state.copyWith(items: items);
+  }
+
+  /// "Marcar Todas" (6.3.3) — remarca só os itens do roster passado que
+  /// foram individualmente restaurados. O roster vem de fora (a tela de
+  /// Revisão captura um snapshot dos ids ao abrir, 6.3.1) porque a lista
+  /// de itens `naLixeira` muda à medida que se alterna cada um, e a
+  /// tela precisa continuar mostrando o mesmo conjunto.
+  void markAllInQueue(List<String> itemIds) {
+    final items = [...state.items];
+    for (final id in itemIds) {
+      final index = items.indexWhere((i) => i.id == id);
+      if (index == -1 || items[index].isInDeletionQueue) continue;
+      items[index] = items[index].markForDeletion(DateTime.now());
+    }
+    state = state.copyWith(items: items);
+  }
+
+  /// "Desmarcar Todas" (6.3.3).
+  void unmarkAllInQueue(List<String> itemIds) {
+    final items = [...state.items];
+    for (final id in itemIds) {
+      final index = items.indexWhere((i) => i.id == id);
+      if (index == -1 || !items[index].isInDeletionQueue) continue;
+      items[index] = items[index].restoreFromQueue();
+    }
+    state = state.copyWith(items: items);
+  }
+
+  /// Simula `RESULT_OK` do diálogo do sistema (4.3.4) — sem
+  /// `MethodChannel` real ainda (2.1.5), não há como esperar a resposta
+  /// de `createTrashRequest`/`createDeleteRequest` de verdade.
+  ///
+  /// Remove os itens da sessão nos dois modos. Não é uma simplificação
+  /// arbitrária: a distinção entre lixeira (3.6 — retenção de 30 dias,
+  /// restauração) e definitivo só existe de fato no índice persistido
+  /// e no canal nativo, nenhum dos dois existe nesta fase. Sem eles,
+  /// manter um item "na lixeira do sistema" apenas em memória não teria
+  /// como ser restaurado depois — só criaria um estado morto. O modo
+  /// escolhido ainda importa para o texto do resumo (6.4.5), que quem
+  /// chama monta a partir de `deletionModeProvider`.
+  void confirmDeletion(List<String> itemIds) {
+    final oldItems = state.items;
+    final newItems = oldItems.where((i) => !itemIds.contains(i.id)).toList();
+
+    final currentId = state.currentIndex < oldItems.length
+        ? oldItems[state.currentIndex].id
+        : null;
+    final preservedIndex = currentId == null
+        ? -1
+        : newItems.indexWhere((i) => i.id == currentId);
+
+    final newIndex = preservedIndex != -1
+        ? preservedIndex
+        : (newItems.isEmpty
+            ? 0
+            : state.currentIndex.clamp(0, newItems.length));
+
+    state = state.copyWith(items: newItems, currentIndex: newIndex);
+  }
+
   void _pushUndo(MediaItemEntity beforeAction) {
     final entry = UndoEntry(
       itemId: beforeAction.id,

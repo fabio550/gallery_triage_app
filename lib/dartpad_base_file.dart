@@ -372,6 +372,7 @@ enum MediaType {
   video,
 }
 //-------------------------------------------------//9.PROGRESS-BAR
+
 class ProgressBar extends StatelessWidget {
   final bool showLegend;
   final int totalItems;
@@ -496,7 +497,7 @@ class ProgressBar extends StatelessWidget {
                     ),
                   ),
                   TextSpan(
-                    text: '${total - keptItems}',
+                    text: '${totalItems - keptItems}',
                     style: text.labelSmall?.copyWith(
                       color: color.onSurfaceVariant,
                     ),
@@ -1530,7 +1531,15 @@ class TriagePage extends ConsumerStatefulWidget {
   ConsumerState<TriagePage> createState() => _TriagePageState();
 }
 
+enum _ExitAction { cancel, discard, deleteNow }
+
 class _TriagePageState extends ConsumerState<TriagePage> {
+  /// Guarda contra reabrir a Revisão a cada rebuild enquanto a fila
+  /// segue esgotada. Reseta quando `isAtEnd` deixa de ser verdade (ex.:
+  /// "Rever itens"), pra disparar de novo na próxima vez que a fila
+  /// esgotar de verdade.
+  bool _autoOpenedReview = false;
+
   @override
   void initState() {
     super.initState();
@@ -1559,6 +1568,89 @@ class _TriagePageState extends ConsumerState<TriagePage> {
         .toggleAlbum(selectedAlbumId);
   }
 
+  /// Único caminho pra abrir a Revisão — usado pelo ícone da AppBar
+  /// (6.2.1) e pelo gatilho automático de fim de fila (3.5.2: a fila
+  /// deve ser resolvida dentro da sessão, então chegar ao fim com
+  /// itens pendentes não é "concluído").
+  Future<void> _openReviewPage(CategorySummary category) async {
+    final message = await Navigator.of(context).push<String>(
+      MaterialPageRoute(
+        builder: (_) => TriageReviewPage(
+          categoryRef: category.ref,
+          categoryLabel: category.label,
+        ),
+      ),
+    );
+    if (message != null && mounted) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(message)));
+    }
+  }
+
+  /// 3.5.3 — diálogo bloqueante ao tentar sair (AppBar ou botão de
+  /// voltar do sistema, os dois passam por aqui via PopScope) com
+  /// itens marcados. Três opções, sem meio-termo silencioso.
+  Future<void> _handlePendingQueueOnExit() async {
+    final categoryRef = widget.category.ref;
+
+    final action = await showDialog<_ExitAction>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Fila de exclusão pendente'),
+        content: const Text(
+          'Você tem itens marcados para exclusão nesta categoria. '
+          'A fila não é salva entre sessões — o que fazer com eles?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () =>
+                Navigator.of(dialogContext).pop(_ExitAction.cancel),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            onPressed: () =>
+                Navigator.of(dialogContext).pop(_ExitAction.discard),
+            child: const Text('Descartar marcações'),
+          ),
+          FilledButton(
+            onPressed: () =>
+                Navigator.of(dialogContext).pop(_ExitAction.deleteNow),
+            child: const Text('Excluir agora'),
+          ),
+        ],
+      ),
+    );
+
+    if (!mounted || action == null || action == _ExitAction.cancel) return;
+
+    if (action == _ExitAction.discard) {
+      // 3.5.3 — restaura cada item a partir de preQueueDecision e
+      // preQueueAlbumId (mesmo mecanismo de unmarkAllInQueue, 6.3.3).
+      final queuedIds = ref
+          .read(triageSessionProvider(categoryRef))
+          .items
+          .where((i) => i.isInDeletionQueue)
+          .map((i) => i.id)
+          .toList();
+      ref
+          .read(triageSessionProvider(categoryRef).notifier)
+          .unmarkAllInQueue(queuedIds);
+      if (mounted) Navigator.of(context).pop();
+      return;
+    }
+
+    // _ExitAction.deleteNow — mesmo diálogo de confirmação da Revisão
+    // (6.3.5), não uma exclusão silenciosa sem escolher o modo.
+    await _openReviewPage(widget.category);
+    if (!mounted) return;
+    final stillPending =
+        ref.read(triageSessionProvider(categoryRef)).queueCount > 0;
+    // Só sai se a Revisão realmente esvaziou a fila — se o usuário
+    // cancelou ou deixou itens pra trás lá, continua nesta tela.
+    if (!stillPending) Navigator.of(context).pop();
+  }
+
   @override
   Widget build(BuildContext context) {
     final category = widget.category;
@@ -1571,25 +1663,88 @@ class _TriagePageState extends ConsumerState<TriagePage> {
     final lastUsedAlbumLabel =
         lastUsedAlbumId == null ? null : MockAlbums.names[lastUsedAlbumId];
 
+    if (!session.isAtEnd) {
+      _autoOpenedReview = false;
+    }
+
     // TODO §7 (Etapa 8): estado de conclusão real, com resumo das duas
-    // métricas e ação de retorno ao dashboard. Por ora, só o botão que
-    // evita o beco sem saída: reabrir a categoria para classificar em
-    // álbum itens que ficaram mantidos sem álbum (3.2.2).
+    // métricas e ação de retorno ao dashboard.
     if (session.isAtEnd) {
-      return Scaffold(
-        appBar: AppBar(title: Text(category.label)),
-        body: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text('Fila concluída', style: text.titleMedium),
-              const SizedBox(height: 16),
-              FilledButton(
-                onPressed: notifier.restartFromBeginning,
-                child: const Text('Rever itens'),
-              ),
-            ],
-          ),
+      if (session.queueCount > 0 && !_autoOpenedReview) {
+        // 3.5.2 — não dá pra considerar a categoria concluída com
+        // marcações pendentes. Agendado pro próximo frame porque não
+        // se navega durante o build.
+        _autoOpenedReview = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _openReviewPage(category);
+        });
+      }
+
+      return PopScope(
+        canPop: session.queueCount == 0,
+        onPopInvokedWithResult: (didPop, result) {
+          if (didPop) return;
+          _handlePendingQueueOnExit();
+        },
+        child: Scaffold(
+          appBar: AppBar(title: Text(category.label)),
+          body: session.queueCount > 0
+              // Estado transitório — o postFrameCallback acima já vai
+              // empilhar a Revisão no próximo frame. Chega a renderizar
+              // por um instante, então não pode ficar em branco.
+              ? Center(
+                  child: Text(
+                    'Abrindo revisão da fila…',
+                    style: text.titleMedium,
+                  ),
+                )
+              // §7 — "estado de conclusão com resumo das duas métricas
+              // e ação de retorno". Só chega aqui com queueCount == 0
+              // (senão caía no ramo acima), então nunca sobra fila
+              // pendente por trás deste resumo.
+              : Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.check_circle_outline,
+                          size: 56,
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
+                        const SizedBox(height: 16),
+                        Text('Fila concluída', style: text.headlineSmall),
+                        const SizedBox(height: 24),
+                        ProgressBar(
+                          showLegend: true,
+                          totalItems: session.totalCount,
+                          classifiedItems: session.classifiedCount,
+                          keptItems: session.keptCount,
+                        ),
+                        const SizedBox(height: 32),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton(
+                                onPressed: notifier.restartFromBeginning,
+                                child: const Text('Rever itens'),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: FilledButton(
+                                onPressed: () =>
+                                    Navigator.of(context).pop(),
+                                child: const Text('Voltar ao Dashboard'),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
         ),
       );
     }
@@ -1598,135 +1753,157 @@ class _TriagePageState extends ConsumerState<TriagePage> {
     final nextItem =
         session.hasNext ? session.items[session.currentIndex + 1] : null;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Column(
-          children: [
-            Text(category.label),
-            // `session.totalCount` em vez de `category.totalItems`: os
-            // dois vêm do mesmo `MockMediaItems.forCategory`, mas usar o
-            // da sessão evita depender de dois caminhos de agregação
-            // ficarem sincronizados manualmente.
-            Text(
-              'Item ${session.currentIndex + 1} de ${session.totalCount}',
-              style: text.bodySmall,
-            ),
+    return PopScope(
+      canPop: session.queueCount == 0,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        _handlePendingQueueOnExit();
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          title: Column(
+            children: [
+              Text(category.label),
+              // `session.totalCount` em vez de `category.totalItems`:
+              // os dois vêm do mesmo `MockMediaItems.forCategory`, mas
+              // usar o da sessão evita depender de dois caminhos de
+              // agregação ficarem sincronizados manualmente.
+              Text(
+                'Item ${session.currentIndex + 1} de ${session.totalCount}',
+                style: text.bodySmall,
+              ),
+            ],
+          ),
+          actions: [
+            // 6.2.1 — badge com a contagem da fila na categoria ativa.
+            // Oculto com a fila vazia (7 — "Tela de Revisão
+            // inacessível").
+            if (session.queueCount > 0)
+              IconButton(
+                tooltip: 'Revisar fila de exclusão',
+                icon: Badge(
+                  label: Text('${session.queueCount}'),
+                  child: const Icon(Icons.delete_outline),
+                ),
+                onPressed: () => _openReviewPage(category),
+              ),
           ],
         ),
-      ),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 40),
-            child: ProgressBar(
-              showLegend: true,
-              totalItems: session.totalCount,
-              classifiedItems: session.classifiedCount,
-              keptItems: session.keptCount,
+        body: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 40),
+              child: ProgressBar(
+                showLegend: true,
+                totalItems: session.totalCount,
+                classifiedItems: session.classifiedCount,
+                keptItems: session.keptCount,
+              ),
             ),
-          ),
-          TriageCarousel(
-            items: session.items,
-            currentIndex: session.currentIndex,
-            onThumbTap: notifier.jumpTo,
-          ),
-          Expanded(
-            child: Stack(
-              children: [
-                TriageCard(
-                  // Key por item: sem ela o State do card sobrevive à
-                  // troca e o próximo entra deslocado, onde o anterior
-                  // saiu.
-                  key: ValueKey(current.id),
-                  item: current,
-                  behind: nextItem != null ? MediaCard(item: nextItem) : null,
-                  onSwipeLeft: notifier.markForDeletion,
-                  onSwipeRight: notifier.keep,
-                  onSwipeUp: notifier.classifyWithLastUsedAlbum,
-                  onSwipeDown: () => _openAlbumPanel(current.albumId),
-                  lastUsedAlbumLabel: lastUsedAlbumLabel,
-                ),
-                // Overlay topo-esquerdo (6.2.10). Desabilitado com a
-                // pilha vazia — `onPressed: null` já cobre isso, sem
-                // precisar de um estado visual separado.
-                Positioned(
-                  top: 8,
-                  left: 8,
-                  child: IconButton.filledTonal(
-                    icon: const Icon(Icons.undo),
-                    tooltip: 'Desfazer',
-                    onPressed: session.canUndo ? notifier.undo : null,
+            TriageCarousel(
+              items: session.items,
+              currentIndex: session.currentIndex,
+              onThumbTap: notifier.jumpTo,
+            ),
+            Expanded(
+              child: Stack(
+                children: [
+                  TriageCard(
+                    // Key por item: sem ela o State do card sobrevive à
+                    // troca e o próximo entra deslocado, onde o
+                    // anterior saiu.
+                    key: ValueKey(current.id),
+                    item: current,
+                    behind:
+                        nextItem != null ? MediaCard(item: nextItem) : null,
+                    onSwipeLeft: notifier.markForDeletion,
+                    onSwipeRight: notifier.keep,
+                    onSwipeUp: notifier.classifyWithLastUsedAlbum,
+                    onSwipeDown: () => _openAlbumPanel(current.albumId),
+                    lastUsedAlbumLabel: lastUsedAlbumLabel,
                   ),
-                ),
-                // Pílula de último álbum (6.2.18) — affordance sempre
-                // visível, distinta do feedback de arrasto (que só
-                // aparece dentro do TriageCard durante o gesto).
-                if (lastUsedAlbumLabel != null)
+                  // Overlay topo-esquerdo (6.2.10). Desabilitado com a
+                  // pilha vazia — `onPressed: null` já cobre isso, sem
+                  // precisar de um estado visual separado.
                   Positioned(
                     top: 8,
-                    left: 0,
-                    right: 0,
-                    child: Center(
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          color: Colors.black.withValues(alpha: 0.55),
-                          borderRadius: BorderRadius.circular(999),
-                        ),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 6,
+                    left: 8,
+                    child: IconButton.filledTonal(
+                      icon: const Icon(Icons.undo),
+                      tooltip: 'Desfazer',
+                      onPressed: session.canUndo ? notifier.undo : null,
+                    ),
+                  ),
+                  // Pílula de último álbum (6.2.18) — affordance sempre
+                  // visível, distinta do feedback de arrasto (que só
+                  // aparece dentro do TriageCard durante o gesto).
+                  if (lastUsedAlbumLabel != null)
+                    Positioned(
+                      top: 8,
+                      left: 0,
+                      right: 0,
+                      child: Center(
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: Colors.black.withValues(alpha: 0.55),
+                            borderRadius: BorderRadius.circular(999),
                           ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(
-                                Icons.arrow_upward,
-                                size: 14,
-                                color: Colors.white,
-                              ),
-                              const SizedBox(width: 4),
-                              Text(
-                                lastUsedAlbumLabel,
-                                style: text.labelSmall
-                                    ?.copyWith(color: Colors.white),
-                              ),
-                            ],
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 6,
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(
+                                  Icons.arrow_upward,
+                                  size: 14,
+                                  color: Colors.white,
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  lastUsedAlbumLabel,
+                                  style: text.labelSmall
+                                      ?.copyWith(color: Colors.white),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ),
                     ),
-                  ),
-              ],
+                ],
+              ),
             ),
-          ),
-          // Alça no rodapé (6.2.16) — segundo ponto de entrada do
-          // painel, equivalente ao swipe para baixo.
-          GestureDetector(
-            onTap: () => _openAlbumPanel(current.albumId),
-            behavior: HitTestBehavior.opaque,
-            child: const Padding(
-              padding: EdgeInsets.symmetric(vertical: 6),
-              child: Center(
-                child: SizedBox(
-                  width: 32,
-                  height: 4,
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      color: Colors.white24,
-                      borderRadius: BorderRadius.all(Radius.circular(2)),
+            // Alça no rodapé (6.2.16) — segundo ponto de entrada do
+            // painel, equivalente ao swipe para baixo.
+            GestureDetector(
+              onTap: () => _openAlbumPanel(current.albumId),
+              behavior: HitTestBehavior.opaque,
+              child: const Padding(
+                padding: EdgeInsets.symmetric(vertical: 6),
+                child: Center(
+                  child: SizedBox(
+                    width: 32,
+                    height: 4,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: Colors.white24,
+                        borderRadius: BorderRadius.all(Radius.circular(2)),
+                      ),
                     ),
                   ),
                 ),
               ),
             ),
-          ),
-          TriageActionBar(
-            onDelete: notifier.markForDeletion,
-            onSkip: notifier.skip,
-            onKeep: notifier.keep,
-          ),
-        ],
+            TriageActionBar(
+              onDelete: notifier.markForDeletion,
+              onSkip: notifier.skip,
+              onKeep: notifier.keep,
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -2667,6 +2844,89 @@ class TriageSessionNotifier extends Notifier<TriageSessionState> {
     }
   }
 
+  // --- Tela de Revisão da Lixeira (6.3) -------------------------------
+  //
+  // Nada aqui entra na pilha de desfazer — 6.2.14 é explícito:
+  // "Desmarcar item na Tela de Revisão não entra na pilha da Triagem."
+  // E nada disso move o cursor da Triagem: a Revisão é uma tela à
+  // parte, olhando pro mesmo `state.items` por id.
+
+  /// Alterna um item entre selecionado para remoção e restaurado
+  /// (6.3.4). Restaurar usa `preQueueDecision`/`preQueueAlbumId` —
+  /// mesmo mecanismo de 3.5.3/5.4.1, não uma restauração inventada
+  /// aqui.
+  void toggleQueueMembership(String itemId) {
+    final index = state.items.indexWhere((i) => i.id == itemId);
+    if (index == -1) return;
+
+    final item = state.items[index];
+    final updated = item.isInDeletionQueue
+        ? item.restoreFromQueue()
+        : item.markForDeletion(DateTime.now());
+
+    final items = [...state.items];
+    items[index] = updated;
+    state = state.copyWith(items: items);
+  }
+
+  /// "Marcar Todas" (6.3.3) — remarca só os itens do roster passado que
+  /// foram individualmente restaurados. O roster vem de fora (a tela de
+  /// Revisão captura um snapshot dos ids ao abrir, 6.3.1) porque a lista
+  /// de itens `naLixeira` muda à medida que se alterna cada um, e a
+  /// tela precisa continuar mostrando o mesmo conjunto.
+  void markAllInQueue(List<String> itemIds) {
+    final items = [...state.items];
+    for (final id in itemIds) {
+      final index = items.indexWhere((i) => i.id == id);
+      if (index == -1 || items[index].isInDeletionQueue) continue;
+      items[index] = items[index].markForDeletion(DateTime.now());
+    }
+    state = state.copyWith(items: items);
+  }
+
+  /// "Desmarcar Todas" (6.3.3).
+  void unmarkAllInQueue(List<String> itemIds) {
+    final items = [...state.items];
+    for (final id in itemIds) {
+      final index = items.indexWhere((i) => i.id == id);
+      if (index == -1 || !items[index].isInDeletionQueue) continue;
+      items[index] = items[index].restoreFromQueue();
+    }
+    state = state.copyWith(items: items);
+  }
+
+  /// Simula `RESULT_OK` do diálogo do sistema (4.3.4) — sem
+  /// `MethodChannel` real ainda (2.1.5), não há como esperar a resposta
+  /// de `createTrashRequest`/`createDeleteRequest` de verdade.
+  ///
+  /// Remove os itens da sessão nos dois modos. Não é uma simplificação
+  /// arbitrária: a distinção entre lixeira (3.6 — retenção de 30 dias,
+  /// restauração) e definitivo só existe de fato no índice persistido
+  /// e no canal nativo, nenhum dos dois existe nesta fase. Sem eles,
+  /// manter um item "na lixeira do sistema" apenas em memória não teria
+  /// como ser restaurado depois — só criaria um estado morto. O modo
+  /// escolhido ainda importa para o texto do resumo (6.4.5), que quem
+  /// chama monta a partir de `deletionModeProvider`.
+  void confirmDeletion(List<String> itemIds) {
+    final oldItems = state.items;
+    final newItems = oldItems.where((i) => !itemIds.contains(i.id)).toList();
+
+    final currentId = state.currentIndex < oldItems.length
+        ? oldItems[state.currentIndex].id
+        : null;
+    final preservedIndex = currentId == null
+        ? -1
+        : newItems.indexWhere((i) => i.id == currentId);
+
+    final newIndex = preservedIndex != -1
+        ? preservedIndex
+        : (newItems.isEmpty
+            ? 0
+            : state.currentIndex.clamp(0, newItems.length));
+
+    state = state.copyWith(items: newItems, currentIndex: newIndex);
+  }
+
   void _pushUndo(MediaItemEntity beforeAction) {
     final entry = UndoEntry(
       itemId: beforeAction.id,
@@ -2740,19 +3000,27 @@ class TriageSessionState {
 
   bool get canUndo => undoStack.isNotEmpty;
 
-  int get keptCount =>
-      items.where((i) => i.decision == TriageDecision.kept).length;
+  /// 6.1.10 — itens retidos ou indisponíveis não entram em nenhum
+  /// contador. Sem filtro aqui, a barra de progresso ficaria errada
+  /// assim que algo fosse excluído (moveToSystemTrash).
+  int get keptCount => items
+      .where((i) => i.isCountable && i.decision == TriageDecision.kept)
+      .length;
 
   /// Mesma restrição de mock_categories.dart: um item classificado que
   /// caiu na fila (3.2.5) não conta como classificado no agregado —
   /// 6.1.2 manda esse item para o trilho vazio.
   int get classifiedCount => items
-      .where((i) => i.decision == TriageDecision.kept && i.albumId != null)
+      .where((i) =>
+          i.isCountable &&
+          i.decision == TriageDecision.kept &&
+          i.albumId != null)
       .length;
 
-  int get queueCount => items.where((i) => i.isInDeletionQueue).length;
+  int get queueCount =>
+      items.where((i) => i.isCountable && i.isInDeletionQueue).length;
 
-  int get totalCount => items.length;
+  int get totalCount => items.where((i) => i.isCountable).length;
 
   TriageSessionState copyWith({
     List<MediaItemEntity>? items,
@@ -3192,3 +3460,281 @@ class _AlbumPanelState extends ConsumerState<AlbumPanel> {
   }
 }
 
+//--------------------------------------------------//40.QUEUE-GRID-TILE
+
+/// Grade da Tela de Revisão (6.3.2) — mesma convenção de borda de 3.3
+/// usada no resto do app, não uma paleta nova. O selo no canto (marcado
+/// para exclusão vs. restaurado) é redundante com a cor de propósito:
+/// mesmo princípio de não comunicar só por cor do SwipeOverlay.
+class QueueGridTile extends StatelessWidget {
+  const QueueGridTile({
+    required this.item,
+    required this.onTap,
+    super.key,
+  });
+
+  final MediaItemEntity item;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final stateColor = TriageVisualState.of(item).colorIn(context.triageColors);
+    final marked = item.isInDeletionQueue;
+
+    return GestureDetector(
+      onTap: onTap,
+      child: AspectRatio(
+        aspectRatio: 1,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            DecoratedBox(
+              decoration: BoxDecoration(
+                color: mediaPlaceholderColor(item.id),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: stateColor, width: 3),
+              ),
+              child: item.isVideo
+                  ? const Center(
+                      child: Icon(Icons.videocam, color: Colors.white70),
+                    )
+                  : null,
+            ),
+            Positioned(
+              top: 4,
+              right: 4,
+              child: CircleAvatar(
+                radius: 11,
+                backgroundColor:
+                    marked ? const Color(0xFFF2554B) : Colors.black54,
+                child: Icon(
+                  marked ? Icons.delete : Icons.check,
+                  size: 14,
+                  color: Colors.white,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+//--------------------------------------------------//41.TRIAGE-REVIEW-PAGE
+
+/// 6.3 — itens com `decision == naLixeira` na categoria ativa.
+/// Acessível só pelo ícone da AppBar da Triagem (6.2.1).
+///
+/// O roster exibido é um snapshot capturado na abertura (`initState`),
+/// não uma consulta ao vivo: alternar um item individualmente (6.3.4)
+/// não pode fazê-lo sumir da tela, senão "Marcar Todas" não teria como
+/// remarcá-lo depois.
+class TriageReviewPage extends ConsumerStatefulWidget {
+  const TriageReviewPage({
+    required this.categoryRef,
+    required this.categoryLabel,
+    super.key,
+  });
+
+  final CategoryRef categoryRef;
+  final String categoryLabel;
+
+  @override
+  ConsumerState<TriageReviewPage> createState() => _TriageReviewPageState();
+}
+
+class _TriageReviewPageState extends ConsumerState<TriageReviewPage> {
+  late final List<String> _queueSnapshot;
+
+  @override
+  void initState() {
+    super.initState();
+    final session = ref.read(triageSessionProvider(widget.categoryRef));
+    _queueSnapshot = session.items
+        .where((i) => i.isInDeletionQueue)
+        .map((i) => i.id)
+        .toList();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final session = ref.watch(triageSessionProvider(widget.categoryRef));
+    final notifier =
+        ref.read(triageSessionProvider(widget.categoryRef).notifier);
+
+    final byId = {for (final i in session.items) i.id: i};
+    final items = _queueSnapshot
+        .map((id) => byId[id])
+        .whereType<MediaItemEntity>()
+        .toList();
+
+    final selected = items.where((i) => i.isInDeletionQueue).toList();
+    final selectedSize = selected.fold<int>(0, (sum, i) => sum + i.sizeBytes);
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('Revisão — ${widget.categoryLabel}'),
+        actions: [
+          TextButton(
+            onPressed: () => notifier.markAllInQueue(_queueSnapshot),
+            child: const Text('Marcar Todas'),
+          ),
+          TextButton(
+            onPressed: () => notifier.unmarkAllInQueue(_queueSnapshot),
+            child: const Text('Desmarcar Todas'),
+          ),
+        ],
+      ),
+      body: items.isEmpty
+          ? const Center(child: Text('Nada para revisar.'))
+          : GridView.builder(
+              padding: const EdgeInsets.all(12),
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 3,
+                crossAxisSpacing: 8,
+                mainAxisSpacing: 8,
+              ),
+              itemCount: items.length,
+              itemBuilder: (context, index) {
+                final item = items[index];
+                return QueueGridTile(
+                  item: item,
+                  onTap: () => notifier.toggleQueueMembership(item.id),
+                );
+              },
+            ),
+      bottomNavigationBar: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: FilledButton.icon(
+            icon: const Icon(Icons.delete_outline),
+            label: Text(
+              selected.isEmpty
+                  ? 'Excluir Selecionadas'
+                  : 'Excluir Selecionadas (${selected.length} · '
+                      '${(selectedSize / (1024 * 1024)).toStringAsFixed(0)} MB)',
+            ),
+            // TODO Etapa 7b concluída: diálogo de confirmação (6.3.5) +
+            // execução simulada (6.3.6/6.3.7, 6.4). O diálogo real do
+            // sistema (4.3) continua fora de escopo — não há
+            // MethodChannel ainda.
+            onPressed: selected.isEmpty
+                ? null
+                : () => _confirmDeletion(selected),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _confirmDeletion(List<MediaItemEntity> selected) async {
+    final currentMode = ref.read(deletionModeProvider);
+    final totalSize = selected.fold<int>(0, (sum, i) => sum + i.sizeBytes);
+
+    final confirmedMode = await showDialog<DeletionMode>(
+      context: context,
+      builder: (dialogContext) {
+        // Fora do StatefulBuilder de propósito: se estivesse dentro, a
+        // seleção voltaria pro padrão a cada toque no radio, já que o
+        // builder interno reexecuta a cada setDialogState.
+        var selectedMode = currentMode;
+        return StatefulBuilder(
+          builder: (dialogContext, setDialogState) => AlertDialog(
+            title: const Text('Excluir itens'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '${selected.length} itens · '
+                  '${(totalSize / (1024 * 1024)).toStringAsFixed(0)} MB',
+                ),
+                const SizedBox(height: 8),
+                RadioGroup<DeletionMode>(
+                  groupValue: selectedMode,
+                  onChanged: (v) => setDialogState(() => selectedMode = v!),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: const [
+                      RadioListTile<DeletionMode>(
+                        contentPadding: EdgeInsets.zero,
+                        title: Text('Lixeira do sistema'),
+                        subtitle: Text('Reversível por cerca de 30 dias.'),
+                        value: DeletionMode.trash,
+                      ),
+                      RadioListTile<DeletionMode>(
+                        contentPadding: EdgeInsets.zero,
+                        title: Text('Excluir definitivamente'),
+                        subtitle: Text('Não pode ser desfeito.'),
+                        value: DeletionMode.permanent,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                child: const Text('Cancelar'),
+              ),
+              FilledButton(
+                onPressed: () =>
+                    Navigator.of(dialogContext).pop(selectedMode),
+                child: const Text('Excluir'),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+
+    if (confirmedMode == null || !mounted) return;
+
+    ref.read(deletionModeProvider.notifier).set(confirmedMode);
+    ref
+        .read(triageSessionProvider(widget.categoryRef).notifier)
+        .confirmDeletion(selected.map((i) => i.id).toList());
+
+    // 6.4.1 — texto condicionado ao modo (4.4.5). Quem exibe é o
+    // TriagePage: 6.4.5 manda voltar pra lá, então o resumo não faz
+    // sentido aparecer numa tela que já está fechando.
+    final message = confirmedMode == DeletionMode.trash
+        ? '${selected.length} itens movidos para a lixeira do sistema '
+            '(retidos por cerca de 30 dias).'
+        : '${selected.length} itens excluídos — '
+            '${(totalSize / (1024 * 1024)).toStringAsFixed(0)} MB liberados.';
+
+    if (!mounted) return;
+    Navigator.of(context).pop(message);
+  }
+}
+//--------------------------------------------------//42.DELETION-MODE
+
+/// 4.4 — escolha feita no diálogo de confirmação da Tela de Revisão
+/// (6.3.5), sem tela de configurações dedicada nesta versão.
+enum DeletionMode { trash, permanent }
+
+
+//--------------------------------------------------//43.DELETION-MODE-PROVIDER
+
+final deletionModeProvider =
+    NotifierProvider<DeletionModeNotifier, DeletionMode>(
+  DeletionModeNotifier.new,
+);
+
+/// 4.4.2 — "a última escolha é memorizada como padrão e vem
+/// pré-selecionada nas próximas operações". Em memória por enquanto,
+/// como o resto de 2.6 (viraria `shared_preferences`).
+///
+/// Padrão inicial: lixeira do sistema — reversível, a opção mais
+/// segura antes de existir qualquer escolha do usuário.
+class DeletionModeNotifier extends Notifier<DeletionMode> {
+  @override
+  DeletionMode build() => DeletionMode.trash;
+
+  void set(DeletionMode mode) => state = mode;
+}
+
+//--------------------------------------------------//44.

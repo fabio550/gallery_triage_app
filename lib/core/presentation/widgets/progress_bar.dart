@@ -124,7 +124,7 @@ class ProgressBar extends StatelessWidget {
                     ),
                   ),
                   TextSpan(
-                    text: '${total - keptItems}',
+                    text: '${totalItems - keptItems}',
                     style: text.labelSmall?.copyWith(
                       color: color.onSurfaceVariant,
                     ),

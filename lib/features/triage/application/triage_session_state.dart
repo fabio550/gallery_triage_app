@@ -36,19 +36,27 @@ class TriageSessionState {
 
   bool get canUndo => undoStack.isNotEmpty;
 
-  int get keptCount =>
-      items.where((i) => i.decision == TriageDecision.kept).length;
+  /// 6.1.10 — itens retidos ou indisponíveis não entram em nenhum
+  /// contador. Sem filtro aqui, a barra de progresso ficaria errada
+  /// assim que algo fosse excluído (moveToSystemTrash).
+  int get keptCount => items
+      .where((i) => i.isCountable && i.decision == TriageDecision.kept)
+      .length;
 
   /// Mesma restrição de mock_categories.dart: um item classificado que
   /// caiu na fila (3.2.5) não conta como classificado no agregado —
   /// 6.1.2 manda esse item para o trilho vazio.
   int get classifiedCount => items
-      .where((i) => i.decision == TriageDecision.kept && i.albumId != null)
+      .where((i) =>
+          i.isCountable &&
+          i.decision == TriageDecision.kept &&
+          i.albumId != null)
       .length;
 
-  int get queueCount => items.where((i) => i.isInDeletionQueue).length;
+  int get queueCount =>
+      items.where((i) => i.isCountable && i.isInDeletionQueue).length;
 
-  int get totalCount => items.length;
+  int get totalCount => items.where((i) => i.isCountable).length;
 
   TriageSessionState copyWith({
     List<MediaItemEntity>? items,
