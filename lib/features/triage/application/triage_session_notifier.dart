@@ -1,10 +1,14 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gallery_triage_app/core/application/providers/last_used_album_provider.dart';
+import 'package:gallery_triage_app/core/application/providers/triage_repository_provider.dart';
 import 'package:gallery_triage_app/core/domain/entities/media_item_entity.dart';
 import 'package:gallery_triage_app/core/domain/enums/deletion_mode.dart';
 import 'package:gallery_triage_app/core/domain/enums/triage_decision.dart';
 import 'package:gallery_triage_app/core/domain/models/category_summary.dart';
-import 'package:gallery_triage_app/features/dashboard/infrastructure/data/mock_media_items.dart';
+import 'package:gallery_triage_app/core/domain/repositories/triage_repository.dart';
 import 'package:gallery_triage_app/features/triage/application/deletion_summary.dart';
 import 'package:gallery_triage_app/features/triage/application/triage_session_state.dart';
 import 'package:gallery_triage_app/features/triage/application/undo_entry.dart';
@@ -13,14 +17,12 @@ final triageSessionProvider = NotifierProvider.family<TriageSessionNotifier,
     TriageSessionState, CategoryRef>(TriageSessionNotifier.new);
 
 /// Estado de triagem em memória, escopado por categoria (3.5.1 — a fila
-/// é sempre relativa à categoria ativa). Opera sobre o dataset mockado
-/// hoje; a interface pública (métodos de transição + getters de
-/// progresso, em [TriageSessionState]) é o contrato que o
-/// `TriageRepository` real (2.4.2) deve preencher depois — a Tela de
-/// Triagem não muda na troca.
-///
-/// Fora de escopo aqui: diálogo de saída com fila pendente (3.5.3 —
-/// Etapa 8).
+/// é sempre relativa à categoria ativa). Lista local + `copyWith` como
+/// antes; cada transição também persiste no [TriageRepository]
+/// (write-through) via [_persist]/`deleteItems`. A interface pública
+/// (métodos de transição + getters de progresso, em
+/// [TriageSessionState]) não mudou na troca do dataset mockado pelo
+/// Drift.
 class TriageSessionNotifier extends Notifier<TriageSessionState> {
   TriageSessionNotifier(this._categoryRef);
 
@@ -30,12 +32,42 @@ class TriageSessionNotifier extends Notifier<TriageSessionState> {
 
   static const _maxUndoEntries = 40;
 
+  late final TriageRepository _repository;
+
   @override
   TriageSessionState build() {
-    final items = MockMediaItems.forCategory(_categoryRef);
-    return TriageSessionState(
+    _repository = ref.read(triageRepositoryProvider);
+    _load();
+    return const TriageSessionState(
+      items: [],
+      currentIndex: 0,
+      isLoading: true,
+    );
+  }
+
+  /// `build()` não pode ser `async` (2.6, handoff) — carrega em
+  /// background e substitui o estado quando a consulta ao Drift
+  /// responder. `seedIfEmpty` é idempotente (uma query COUNT), o custo
+  /// de chamar a cada categoria aberta é desprezível.
+  Future<void> _load() async {
+    await _repository.seedIfEmpty();
+    final items = await _repository.itemsForCategory(_categoryRef);
+    if (!ref.mounted) return;
+    state = state.copyWith(
       items: items,
       currentIndex: _resolveInitialIndex(items),
+      isLoading: false,
+    );
+  }
+
+  /// Write-through (handoff): cada transição grava local primeiro
+  /// (responsividade da UI) e persiste em paralelo, sem bloquear o
+  /// cursor/pilha de desfazer na espera do banco.
+  void _persist(MediaItemEntity item) {
+    unawaited(
+      _repository.updateItem(item).catchError((Object e, StackTrace st) {
+        debugPrint('TriageRepository.updateItem falhou para ${item.id}: $e');
+      }),
     );
   }
 
@@ -82,12 +114,16 @@ class TriageSessionNotifier extends Notifier<TriageSessionState> {
       // 3.2.4: não avança, e esta ação NÃO grava lastUsedAlbumId
       // (6.2.16 — só a vinculação a um álbum diferente grava).
       _pushUndo(current);
-      _replaceCurrent(current.unassignAlbum());
+      final updated = current.unassignAlbum();
+      _replaceCurrent(updated);
+      _persist(updated);
       return;
     }
 
     _pushUndo(current);
-    _replaceCurrent(current.assignToAlbum(albumId, DateTime.now()));
+    final updated = current.assignToAlbum(albumId, DateTime.now());
+    _replaceCurrent(updated);
+    _persist(updated);
     _advance();
     ref.read(lastUsedAlbumProvider.notifier).set(albumId);
   }
@@ -105,7 +141,9 @@ class TriageSessionNotifier extends Notifier<TriageSessionState> {
     if (current == null) return;
 
     _pushUndo(current);
-    _replaceCurrent(current.assignToAlbum(albumId, DateTime.now()));
+    final updated = current.assignToAlbum(albumId, DateTime.now());
+    _replaceCurrent(updated);
+    _persist(updated);
     _advance();
   }
 
@@ -166,6 +204,7 @@ class TriageSessionNotifier extends Notifier<TriageSessionState> {
       currentIndex: entry.anchorPosition,
       undoStack: remaining,
     );
+    _persist(restored);
   }
 
   /// 6.2.14 — "a pilha é zerada ao sair da categoria". Chamado no
@@ -202,6 +241,7 @@ class TriageSessionNotifier extends Notifier<TriageSessionState> {
     final items = [...state.items];
     items[index] = updated;
     state = state.copyWith(items: items);
+    _persist(updated);
   }
 
   /// "Marcar Todas" (6.3.3) — remarca só os itens do roster passado que
@@ -211,38 +251,47 @@ class TriageSessionNotifier extends Notifier<TriageSessionState> {
   /// tela precisa continuar mostrando o mesmo conjunto.
   void markAllInQueue(List<String> itemIds) {
     final items = [...state.items];
+    final changed = <MediaItemEntity>[];
     for (final id in itemIds) {
       final index = items.indexWhere((i) => i.id == id);
       if (index == -1 || items[index].isInDeletionQueue) continue;
-      items[index] = items[index].markForDeletion(DateTime.now());
+      final updated = items[index].markForDeletion(DateTime.now());
+      items[index] = updated;
+      changed.add(updated);
     }
     state = state.copyWith(items: items);
+    changed.forEach(_persist);
   }
 
   /// "Desmarcar Todas" (6.3.3).
   void unmarkAllInQueue(List<String> itemIds) {
     final items = [...state.items];
+    final changed = <MediaItemEntity>[];
     for (final id in itemIds) {
       final index = items.indexWhere((i) => i.id == id);
       if (index == -1 || !items[index].isInDeletionQueue) continue;
-      items[index] = items[index].restoreFromQueue();
+      final updated = items[index].restoreFromQueue();
+      items[index] = updated;
+      changed.add(updated);
     }
     state = state.copyWith(items: items);
+    changed.forEach(_persist);
   }
 
   /// Simula `RESULT_OK` do diálogo do sistema (4.3.4) — sem
   /// `MethodChannel` real ainda (2.1.5), não há como esperar a resposta
   /// de `createTrashRequest`/`createDeleteRequest` de verdade.
   ///
-  /// Remove os itens da sessão nos dois modos. Não é uma simplificação
-  /// arbitrária: a distinção entre lixeira (3.6 — retenção de 30 dias,
-  /// restauração) e definitivo só existe de fato no índice persistido
-  /// e no canal nativo, nenhum dos dois existe nesta fase. Sem eles,
-  /// manter um item "na lixeira do sistema" apenas em memória não teria
-  /// como ser restaurado depois — só criaria um estado morto.
+  /// Remove os itens da sessão E apaga as linhas do índice
+  /// (`TriageRepository.deleteItems`) nos dois modos. Simplificação
+  /// documentada: o modo lixeira deveria só marcar `trashedInSystem`
+  /// (3.6.1), preservando o registro por ~30 dias — aqui apaga direto
+  /// nos dois casos, porque sem o canal nativo não há como restaurar
+  /// depois mesmo (criaria um registro "retido" que nunca purga nem
+  /// reaparece).
   ///
   /// `mode` só importa aqui pra compor o [DeletionSummary] (6.4.1) —
-  /// não muda o que acontece com os itens, os dois removem da sessão.
+  /// não muda o que acontece com os itens, os dois removem a linha.
   void confirmDeletion(List<String> itemIds, DeletionMode mode) {
     final oldItems = state.items;
     final removed = oldItems.where((i) => itemIds.contains(i.id)).toList();
@@ -273,6 +322,12 @@ class TriageSessionNotifier extends Notifier<TriageSessionState> {
       currentIndex: newIndex,
       lastDeletionSummary: summary,
     );
+
+    unawaited(
+      _repository.deleteItems(itemIds).catchError((Object e, StackTrace st) {
+        debugPrint('TriageRepository.deleteItems falhou: $e');
+      }),
+    );
   }
 
   void _pushUndo(MediaItemEntity beforeAction) {
@@ -295,7 +350,9 @@ class TriageSessionNotifier extends Notifier<TriageSessionState> {
     final current = state.currentItem;
     if (current == null) return;
     _pushUndo(current);
-    _replaceCurrent(transition(current, DateTime.now()));
+    final updated = transition(current, DateTime.now());
+    _replaceCurrent(updated);
+    _persist(updated);
     _advance();
   }
 

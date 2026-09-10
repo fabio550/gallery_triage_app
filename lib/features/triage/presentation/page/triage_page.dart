@@ -183,11 +183,18 @@ class _TriagePageState extends ConsumerState<TriagePage> {
     final lastUsedAlbumLabel =
         lastUsedAlbumId == null ? null : MockAlbums.names[lastUsedAlbumId];
 
+    if (session.isLoading) {
+      return Scaffold(
+        appBar: AppBar(title: Text(category.label)),
+        body: const Center(child: CircularProgressIndicator()),
+      );
+    }
+
     if (!session.isAtEnd) {
       _autoOpenedReview = false;
     }
 
-    // TODO §7 (Etapa 8): estado de conclusão real, com resumo das duas
+
     // métricas e ação de retorno ao dashboard.
     if (session.isAtEnd) {
       if (session.queueCount > 0 && !_autoOpenedReview) {

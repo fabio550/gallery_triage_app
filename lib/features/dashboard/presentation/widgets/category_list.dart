@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:gallery_triage_app/core/domain/enums/category_granularity.dart';
 import 'package:gallery_triage_app/core/domain/models/category_summary.dart';
 import 'package:gallery_triage_app/features/dashboard/presentation/widgets/category_tile.dart';
-import 'package:go_router/go_router.dart';
 class CategoryList extends StatelessWidget {
   final List<CategorySummary> categories;
   final CategoryGranularity granularity;

@@ -1,4 +1,5 @@
-import '../enums/triage_decision.dart';
+
+import 'package:gallery_triage_app/core/domain/enums/triage_decision.dart';
 
 /// Sentinela para permitir que [MediaItemEntity.copyWith] escreva `null`
 /// em campos opcionais. Sem isso, desclassificar um item (3.2.4) seria

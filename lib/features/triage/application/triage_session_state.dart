@@ -12,9 +12,16 @@ class TriageSessionState {
     required this.currentIndex,
     this.undoStack = const [],
     this.lastDeletionSummary,
+    this.isLoading = false,
   });
 
   final List<MediaItemEntity> items;
+
+  /// `build()` do notifier não pode ser `async`, mas a consulta ao
+  /// Drift é. Sem isto, `isAtEnd` (items.isEmpty) confundiria
+  /// "carregando" com "categoria vazia" no instante entre abrir a
+  /// tela e o banco responder.
+  final bool isLoading;
 
   /// Pode chegar a `items.length` — é o estado de fim da fila (§7), não
   /// um índice inválido a ser evitado.
@@ -70,12 +77,14 @@ class TriageSessionState {
     int? currentIndex,
     List<UndoEntry>? undoStack,
     DeletionSummary? lastDeletionSummary,
+    bool? isLoading,
   }) {
     return TriageSessionState(
       items: items ?? this.items,
       currentIndex: currentIndex ?? this.currentIndex,
       undoStack: undoStack ?? this.undoStack,
       lastDeletionSummary: lastDeletionSummary ?? this.lastDeletionSummary,
+      isLoading: isLoading ?? this.isLoading,
     );
   }
 }
