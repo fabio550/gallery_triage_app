@@ -9,12 +9,21 @@ class TriageActionBar extends StatelessWidget {
     required this.onDelete,
     required this.onSkip,
     required this.onKeep,
+    this.isVideo = false,
+    this.isPlaying = false,
+    this.onTogglePlay,
     super.key,
   });
 
   final VoidCallback onDelete;
   final VoidCallback onSkip;
   final VoidCallback onKeep;
+
+  /// 6.2.17 — controle de play/pause "presente apenas em itens de
+  /// vídeo", ao lado do botão Pular.
+  final bool isVideo;
+  final bool isPlaying;
+  final VoidCallback? onTogglePlay;
 
   @override
   Widget build(BuildContext context) {
@@ -32,6 +41,13 @@ class TriageActionBar extends StatelessWidget {
             color: triageColors.stateMarkedForDeletion,
             onTap: onDelete,
           ),
+          if (isVideo)
+            _ActionButton(
+              icon: isPlaying ? Icons.pause : Icons.play_arrow,
+              label: isPlaying ? 'Pausar' : 'Reproduzir',
+              color: colors.onSurfaceVariant,
+              onTap: onTogglePlay ?? () {},
+            ),
           _ActionButton(
             icon: Icons.skip_next_outlined,
             label: 'Pular',

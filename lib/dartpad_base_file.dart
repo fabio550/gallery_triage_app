@@ -1514,6 +1514,17 @@ abstract final class MockCategories {
 }
 //-------------------------------------------------//23.TRIAGE-PAGE
 
+/// 4.4.5 — texto condicionado ao modo: lixeira menciona a retenção,
+/// definitivo informa o espaço liberado. Nunca anuncia espaço liberado
+/// que não aconteceu (modo lixeira não libera nada de fato ainda).
+String _deletionSummaryText(DeletionSummary summary) {
+  final mb = (summary.freedBytes / (1024 * 1024)).toStringAsFixed(0);
+  return summary.mode == DeletionMode.trash
+      ? '${summary.count} itens movidos para a lixeira do sistema '
+          '(retidos por cerca de 30 dias).'
+      : '${summary.count} itens excluídos — $mb MB liberados.';
+}
+
 /// Sem estado próprio de triagem (2.1.2 — "Nenhum estado de triagem
 /// reside em widget"). Cursor, itens e decisões vivem em
 /// [TriageSessionNotifier]; esta página só lê o estado e encaminha os
@@ -1539,6 +1550,13 @@ class _TriagePageState extends ConsumerState<TriagePage> {
   /// "Rever itens"), pra disparar de novo na próxima vez que a fila
   /// esgotar de verdade.
   bool _autoOpenedReview = false;
+
+  /// 6.2.17 — estado local de UI, não de domínio: play/pause é
+  /// simulado (sem `photo_manager` não há vídeo real pra decodificar).
+  /// `_playingItemId` existe só pra saber quando resetar `_isPlaying`
+  /// ao trocar de item ("ao avançar, a reprodução é interrompida").
+  bool _isPlaying = false;
+  String? _playingItemId;
 
   @override
   void initState() {
@@ -1715,6 +1733,18 @@ class _TriagePageState extends ConsumerState<TriagePage> {
                         ),
                         const SizedBox(height: 16),
                         Text('Fila concluída', style: text.headlineSmall),
+                        if (session.lastDeletionSummary != null) ...[
+                          const SizedBox(height: 8),
+                          Text(
+                            _deletionSummaryText(session.lastDeletionSummary!),
+                            style: text.bodyMedium?.copyWith(
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSurfaceVariant,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
                         const SizedBox(height: 24),
                         ProgressBar(
                           showLegend: true,
@@ -1752,6 +1782,13 @@ class _TriagePageState extends ConsumerState<TriagePage> {
     final current = session.currentItem!;
     final nextItem =
         session.hasNext ? session.items[session.currentIndex + 1] : null;
+
+    // 6.2.17 — "ao avançar, a reprodução é interrompida". Cobre swipe,
+    // botões e salto pelo carrossel, já que todos mudam `current.id`.
+    if (current.id != _playingItemId) {
+      _isPlaying = false;
+      _playingItemId = current.id;
+    }
 
     return PopScope(
       canPop: session.queueCount == 0,
@@ -1821,6 +1858,7 @@ class _TriagePageState extends ConsumerState<TriagePage> {
                     onSwipeUp: notifier.classifyWithLastUsedAlbum,
                     onSwipeDown: () => _openAlbumPanel(current.albumId),
                     lastUsedAlbumLabel: lastUsedAlbumLabel,
+                    isPlaying: _isPlaying,
                   ),
                   // Overlay topo-esquerdo (6.2.10). Desabilitado com a
                   // pilha vazia — `onPressed: null` já cobre isso, sem
@@ -1832,6 +1870,16 @@ class _TriagePageState extends ConsumerState<TriagePage> {
                       icon: const Icon(Icons.undo),
                       tooltip: 'Desfazer',
                       onPressed: session.canUndo ? notifier.undo : null,
+                    ),
+                  ),
+                  // Overlay topo-direito (6.2.11).
+                  Positioned(
+                    top: 8,
+                    right: 8,
+                    child: IconButton.filledTonal(
+                      icon: const Icon(Icons.info_outline),
+                      tooltip: 'Informações',
+                      onPressed: () => showMediaInfoModal(context, current),
                     ),
                   ),
                   // Pílula de último álbum (6.2.18) — affordance sempre
@@ -1901,6 +1949,9 @@ class _TriagePageState extends ConsumerState<TriagePage> {
               onDelete: notifier.markForDeletion,
               onSkip: notifier.skip,
               onKeep: notifier.keep,
+              isVideo: current.isVideo,
+              isPlaying: _isPlaying,
+              onTogglePlay: () => setState(() => _isPlaying = !_isPlaying),
             ),
           ],
         ),
@@ -2088,6 +2139,10 @@ class TriageCard extends StatefulWidget {
   /// swipe para cima. Nulo = pílula não renderizada e gesto inerte.
   final String? lastUsedAlbumLabel;
 
+  /// 6.2.17 — repassado ao `MediaCard` do item ativo só; nunca ao
+  /// `behind`.
+  final bool isPlaying;
+
   /// Card de baixo da pilha. Opcional: sem ele o efeito continua, só
   /// perde a sensação de profundidade.
   final Widget? behind;
@@ -2099,6 +2154,7 @@ class TriageCard extends StatefulWidget {
     required this.onSwipeUp,
     required this.onSwipeDown,
     required this.lastUsedAlbumLabel,
+    this.isPlaying = false,
     this.behind,
     super.key,
   });
@@ -2266,7 +2322,7 @@ class _TriageCardState extends State<TriageCard>
           animation: _controller,
           // Fora do builder: a árvore da mídia não reconstrói a cada
           // frame de mola nem de arrasto, só o Transform.
-          child: MediaCard(item: widget.item),
+          child: MediaCard(item: widget.item, isPlaying: widget.isPlaying),
           builder: (context, child) {
             final horizontalProgress = _horizontalProgress;
             final verticalProgress = _verticalProgress;
@@ -2321,16 +2377,25 @@ class _TriageCardState extends State<TriageCard>
   }
 }
 //-------------------------------------------------//27.MEDIA-CARD
+
 class MediaCard extends StatelessWidget {
   final MediaItemEntity item;
 
+  /// 6.2.17 — sem `photo_manager` ainda, não há vídeo real pra
+  /// decodificar. Isto só troca o ícone; é o card do próximo item
+  /// (`behind`) que nunca deve receber `true`, já que ele não é o item
+  /// ativo.
+  final bool isPlaying;
+
   const MediaCard({
     required this.item,
+    this.isPlaying = false,
     super.key,
   });
 
   @override
   Widget build(BuildContext context) {
+    // Precedência de 3.3 — mesma regra usada no carrossel (CarouselThumb).
     final borderColor =
         TriageVisualState.of(item).colorIn(context.triageColors);
 
@@ -2349,11 +2414,12 @@ class MediaCard extends StatelessWidget {
           ),
         ],
       ),
-      // Placeholder de vídeo — controles reais entram em 6.2.17 (Etapa 9).
       child: item.isVideo
-          ? const Center(
+          ? Center(
               child: Icon(
-                Icons.play_circle_outline,
+                isPlaying
+                    ? Icons.pause_circle_outline
+                    : Icons.play_circle_outline,
                 size: 48,
                 color: Colors.white70,
               ),
@@ -2904,12 +2970,21 @@ class TriageSessionNotifier extends Notifier<TriageSessionState> {
   /// restauração) e definitivo só existe de fato no índice persistido
   /// e no canal nativo, nenhum dos dois existe nesta fase. Sem eles,
   /// manter um item "na lixeira do sistema" apenas em memória não teria
-  /// como ser restaurado depois — só criaria um estado morto. O modo
-  /// escolhido ainda importa para o texto do resumo (6.4.5), que quem
-  /// chama monta a partir de `deletionModeProvider`.
-  void confirmDeletion(List<String> itemIds) {
+  /// como ser restaurado depois — só criaria um estado morto.
+  ///
+  /// `mode` só importa aqui pra compor o [DeletionSummary] (6.4.1) —
+  /// não muda o que acontece com os itens, os dois removem da sessão.
+  void confirmDeletion(List<String> itemIds, DeletionMode mode) {
     final oldItems = state.items;
+    final removed = oldItems.where((i) => itemIds.contains(i.id)).toList();
     final newItems = oldItems.where((i) => !itemIds.contains(i.id)).toList();
+
+    final freedBytes = removed.fold<int>(0, (sum, i) => sum + i.sizeBytes);
+    final summary = DeletionSummary(
+      count: removed.length,
+      mode: mode,
+      freedBytes: freedBytes,
+    );
 
     final currentId = state.currentIndex < oldItems.length
         ? oldItems[state.currentIndex].id
@@ -2924,7 +2999,11 @@ class TriageSessionNotifier extends Notifier<TriageSessionState> {
             ? 0
             : state.currentIndex.clamp(0, newItems.length));
 
-    state = state.copyWith(items: newItems, currentIndex: newIndex);
+    state = state.copyWith(
+      items: newItems,
+      currentIndex: newIndex,
+      lastDeletionSummary: summary,
+    );
   }
 
   void _pushUndo(MediaItemEntity beforeAction) {
@@ -2974,6 +3053,7 @@ class TriageSessionState {
     required this.items,
     required this.currentIndex,
     this.undoStack = const [],
+    this.lastDeletionSummary,
   });
 
   final List<MediaItemEntity> items;
@@ -2985,6 +3065,11 @@ class TriageSessionState {
   /// 6.2.14 — limitada a 40 entradas pelo notifier. Exposta aqui para a
   /// UI decidir se o botão de desfazer (6.2.10) fica habilitado.
   final List<UndoEntry> undoStack;
+
+  /// 6.4.1 — resumo da última exclusão confirmada nesta sessão, para a
+  /// tela de fim de fila (§7) exibir de forma permanente, não só como
+  /// SnackBar transitório.
+  final DeletionSummary? lastDeletionSummary;
 
   MediaItemEntity? get currentItem =>
       currentIndex >= 0 && currentIndex < items.length
@@ -3026,11 +3111,13 @@ class TriageSessionState {
     List<MediaItemEntity>? items,
     int? currentIndex,
     List<UndoEntry>? undoStack,
+    DeletionSummary? lastDeletionSummary,
   }) {
     return TriageSessionState(
       items: items ?? this.items,
       currentIndex: currentIndex ?? this.currentIndex,
       undoStack: undoStack ?? this.undoStack,
+      lastDeletionSummary: lastDeletionSummary ?? this.lastDeletionSummary,
     );
   }
 }
@@ -3045,7 +3132,7 @@ Color mediaPlaceholderColor(String id) {
   return HSLColor.fromAHSL(1, hue, 0.35, 0.30).toColor();
 }
 
-//--------------------------------------------------//33.TRIAGE_ACTION_BAR
+//--------------------------------------------------//33.TRIAGE-ACTION-BAR
 
 /// Rodapé da Tela de Triagem (6.2.12). Caminho equivalente ao swipe —
 /// por isso os callbacks aqui são os mesmos métodos do notifier que o
@@ -3055,12 +3142,21 @@ class TriageActionBar extends StatelessWidget {
     required this.onDelete,
     required this.onSkip,
     required this.onKeep,
+    this.isVideo = false,
+    this.isPlaying = false,
+    this.onTogglePlay,
     super.key,
   });
 
   final VoidCallback onDelete;
   final VoidCallback onSkip;
   final VoidCallback onKeep;
+
+  /// 6.2.17 — controle de play/pause "presente apenas em itens de
+  /// vídeo", ao lado do botão Pular.
+  final bool isVideo;
+  final bool isPlaying;
+  final VoidCallback? onTogglePlay;
 
   @override
   Widget build(BuildContext context) {
@@ -3078,6 +3174,13 @@ class TriageActionBar extends StatelessWidget {
             color: triageColors.stateMarkedForDeletion,
             onTap: onDelete,
           ),
+          if (isVideo)
+            _ActionButton(
+              icon: isPlaying ? Icons.pause : Icons.play_arrow,
+              label: isPlaying ? 'Pausar' : 'Reproduzir',
+              color: colors.onSurfaceVariant,
+              onTap: onTogglePlay ?? () {},
+            ),
           _ActionButton(
             icon: Icons.skip_next_outlined,
             label: 'Pular',
@@ -3695,7 +3798,7 @@ class _TriageReviewPageState extends ConsumerState<TriageReviewPage> {
     ref.read(deletionModeProvider.notifier).set(confirmedMode);
     ref
         .read(triageSessionProvider(widget.categoryRef).notifier)
-        .confirmDeletion(selected.map((i) => i.id).toList());
+        .confirmDeletion(selected.map((i) => i.id).toList(), confirmedMode);
 
     // 6.4.1 — texto condicionado ao modo (4.4.5). Quem exibe é o
     // TriagePage: 6.4.5 manda voltar pra lá, então o resumo não faz
@@ -3737,4 +3840,127 @@ class DeletionModeNotifier extends Notifier<DeletionMode> {
   void set(DeletionMode mode) => state = mode;
 }
 
-//--------------------------------------------------//44.
+//--------------------------------------------------//44.DELETION-SUMMARY
+
+/// 6.4.1 — "resumo... quantidade de itens processados e volume
+/// correspondente, com texto condicionado ao modo". Guardado na sessão
+/// pra sobreviver à navegação de volta da Revisão e aparecer de forma
+/// permanente na tela de fim de fila (§7), não só como SnackBar
+/// transitório.
+class DeletionSummary {
+  const DeletionSummary({
+    required this.count,
+    required this.mode,
+    required this.freedBytes,
+  });
+
+  final int count;
+  final DeletionMode mode;
+  final int freedBytes;
+}
+//--------------------------------------------------//45.MEDIA-INFO-MODAL
+
+/// 6.2.11 — "Modal rolável com tamanho, extensão, data, caminho e
+/// demais metadados."
+Future<void> showMediaInfoModal(BuildContext context, MediaItemEntity item) {
+  return showModalBottomSheet(
+    context: context,
+    isScrollControlled: true,
+    builder: (_) => _MediaInfoSheet(item: item),
+  );
+}
+
+class _MediaInfoSheet extends ConsumerWidget {
+  const _MediaInfoSheet({required this.item});
+
+  final MediaItemEntity item;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final albums = ref.watch(albumsProvider);
+    String? albumName;
+    for (final album in albums) {
+      if (album.id == item.albumId) {
+        albumName = album.name;
+        break;
+      }
+    }
+
+    final rows = <MapEntry<String, String>>[
+      MapEntry(
+        'Tamanho',
+        '${(item.sizeBytes / (1024 * 1024)).toStringAsFixed(1)} MB',
+      ),
+      MapEntry('Extensão', item.mimeType),
+      MapEntry('Data', _formatDate(item.dateTaken)),
+      MapEntry('Caminho', item.relativePath),
+      if (item.isVideo && item.durationMs != null)
+        MapEntry('Duração', _formatDuration(item.durationMs!)),
+      MapEntry('Screenshot', item.isScreenshot ? 'Sim' : 'Não'),
+      MapEntry('Decisão', _decisionLabel(item.decision)),
+      if (albumName != null) MapEntry('Álbum', albumName),
+    ];
+
+    final text = Theme.of(context).textTheme;
+    final colors = Theme.of(context).colorScheme;
+
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.sizeOf(context).height * 0.6,
+          ),
+          child: ListView(
+            shrinkWrap: true,
+            children: [
+              Text('Informações', style: text.titleMedium),
+              const SizedBox(height: 12),
+              for (final row in rows)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SizedBox(
+                        width: 90,
+                        child: Text(
+                          row.key,
+                          style: text.bodyMedium
+                              ?.copyWith(color: colors.onSurfaceVariant),
+                        ),
+                      ),
+                      Expanded(
+                        child: Text(row.value, style: text.bodyMedium),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+String _formatDate(DateTime d) {
+  final day = d.day.toString().padLeft(2, '0');
+  final month = d.month.toString().padLeft(2, '0');
+  final hour = d.hour.toString().padLeft(2, '0');
+  final minute = d.minute.toString().padLeft(2, '0');
+  return '$day/$month/${d.year} $hour:$minute';
+}
+
+String _formatDuration(int ms) {
+  final totalSeconds = ms ~/ 1000;
+  final minutes = totalSeconds ~/ 60;
+  final seconds = totalSeconds % 60;
+  return '$minutes:${seconds.toString().padLeft(2, '0')}';
+}
+
+String _decisionLabel(TriageDecision decision) => switch (decision) {
+      TriageDecision.undecided => 'Não decidido',
+      TriageDecision.kept => 'Mantido',
+      TriageDecision.markedForDeletion => 'Na fila de exclusão',
+    };

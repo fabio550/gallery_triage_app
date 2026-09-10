@@ -1,5 +1,6 @@
 import 'package:gallery_triage_app/core/domain/entities/media_item_entity.dart';
 import 'package:gallery_triage_app/core/domain/enums/triage_decision.dart';
+import 'package:gallery_triage_app/features/triage/application/deletion_summary.dart';
 import 'package:gallery_triage_app/features/triage/application/undo_entry.dart';
 
 /// Estado de uma sessão de triagem: os itens da categoria ativa e o
@@ -10,6 +11,7 @@ class TriageSessionState {
     required this.items,
     required this.currentIndex,
     this.undoStack = const [],
+    this.lastDeletionSummary,
   });
 
   final List<MediaItemEntity> items;
@@ -21,6 +23,11 @@ class TriageSessionState {
   /// 6.2.14 — limitada a 40 entradas pelo notifier. Exposta aqui para a
   /// UI decidir se o botão de desfazer (6.2.10) fica habilitado.
   final List<UndoEntry> undoStack;
+
+  /// 6.4.1 — resumo da última exclusão confirmada nesta sessão, para a
+  /// tela de fim de fila (§7) exibir de forma permanente, não só como
+  /// SnackBar transitório.
+  final DeletionSummary? lastDeletionSummary;
 
   MediaItemEntity? get currentItem =>
       currentIndex >= 0 && currentIndex < items.length
@@ -62,11 +69,13 @@ class TriageSessionState {
     List<MediaItemEntity>? items,
     int? currentIndex,
     List<UndoEntry>? undoStack,
+    DeletionSummary? lastDeletionSummary,
   }) {
     return TriageSessionState(
       items: items ?? this.items,
       currentIndex: currentIndex ?? this.currentIndex,
       undoStack: undoStack ?? this.undoStack,
+      lastDeletionSummary: lastDeletionSummary ?? this.lastDeletionSummary,
     );
   }
 }

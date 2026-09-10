@@ -7,8 +7,15 @@ import 'package:gallery_triage_app/core/presentation/widgets/media_placeholder.d
 class MediaCard extends StatelessWidget {
   final MediaItemEntity item;
 
+  /// 6.2.17 — sem `photo_manager` ainda, não há vídeo real pra
+  /// decodificar. Isto só troca o ícone; é o card do próximo item
+  /// (`behind`) que nunca deve receber `true`, já que ele não é o item
+  /// ativo.
+  final bool isPlaying;
+
   const MediaCard({
     required this.item,
+    this.isPlaying = false,
     super.key,
   });
 
@@ -33,11 +40,12 @@ class MediaCard extends StatelessWidget {
           ),
         ],
       ),
-      // Placeholder de vídeo — controles reais entram em 6.2.17 (Etapa 9).
       child: item.isVideo
-          ? const Center(
+          ? Center(
               child: Icon(
-                Icons.play_circle_outline,
+                isPlaying
+                    ? Icons.pause_circle_outline
+                    : Icons.play_circle_outline,
                 size: 48,
                 color: Colors.white70,
               ),

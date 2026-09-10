@@ -2,16 +2,30 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:gallery_triage_app/core/application/providers/last_used_album_provider.dart';
+import 'package:gallery_triage_app/core/domain/enums/deletion_mode.dart';
 import 'package:gallery_triage_app/core/domain/models/category_summary.dart';
 import 'package:gallery_triage_app/core/presentation/widgets/progress_bar.dart';
 import 'package:gallery_triage_app/features/dashboard/infrastructure/data/mock_media_items.dart';
+import 'package:gallery_triage_app/features/triage/application/deletion_summary.dart';
 import 'package:gallery_triage_app/features/triage/application/triage_session_notifier.dart';
 import 'package:gallery_triage_app/features/triage/presentation/page/triage_review_page.dart';
 import 'package:gallery_triage_app/features/triage/presentation/widgets/album_panel.dart';
 import 'package:gallery_triage_app/features/triage/presentation/widgets/media_card.dart';
+import 'package:gallery_triage_app/features/triage/presentation/widgets/media_info_modal.dart';
 import 'package:gallery_triage_app/features/triage/presentation/widgets/triage_action_bar.dart';
 import 'package:gallery_triage_app/features/triage/presentation/widgets/triage_card.dart';
 import 'package:gallery_triage_app/features/triage/presentation/widgets/triage_carousel.dart';
+
+/// 4.4.5 — texto condicionado ao modo: lixeira menciona a retenção,
+/// definitivo informa o espaço liberado. Nunca anuncia espaço liberado
+/// que não aconteceu (modo lixeira não libera nada de fato ainda).
+String _deletionSummaryText(DeletionSummary summary) {
+  final mb = (summary.freedBytes / (1024 * 1024)).toStringAsFixed(0);
+  return summary.mode == DeletionMode.trash
+      ? '${summary.count} itens movidos para a lixeira do sistema '
+          '(retidos por cerca de 30 dias).'
+      : '${summary.count} itens excluídos — $mb MB liberados.';
+}
 
 /// Sem estado próprio de triagem (2.1.2 — "Nenhum estado de triagem
 /// reside em widget"). Cursor, itens e decisões vivem em
@@ -38,6 +52,13 @@ class _TriagePageState extends ConsumerState<TriagePage> {
   /// "Rever itens"), pra disparar de novo na próxima vez que a fila
   /// esgotar de verdade.
   bool _autoOpenedReview = false;
+
+  /// 6.2.17 — estado local de UI, não de domínio: play/pause é
+  /// simulado (sem `photo_manager` não há vídeo real pra decodificar).
+  /// `_playingItemId` existe só pra saber quando resetar `_isPlaying`
+  /// ao trocar de item ("ao avançar, a reprodução é interrompida").
+  bool _isPlaying = false;
+  String? _playingItemId;
 
   @override
   void initState() {
@@ -214,6 +235,18 @@ class _TriagePageState extends ConsumerState<TriagePage> {
                         ),
                         const SizedBox(height: 16),
                         Text('Fila concluída', style: text.headlineSmall),
+                        if (session.lastDeletionSummary != null) ...[
+                          const SizedBox(height: 8),
+                          Text(
+                            _deletionSummaryText(session.lastDeletionSummary!),
+                            style: text.bodyMedium?.copyWith(
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSurfaceVariant,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
                         const SizedBox(height: 24),
                         ProgressBar(
                           showLegend: true,
@@ -251,6 +284,13 @@ class _TriagePageState extends ConsumerState<TriagePage> {
     final current = session.currentItem!;
     final nextItem =
         session.hasNext ? session.items[session.currentIndex + 1] : null;
+
+    // 6.2.17 — "ao avançar, a reprodução é interrompida". Cobre swipe,
+    // botões e salto pelo carrossel, já que todos mudam `current.id`.
+    if (current.id != _playingItemId) {
+      _isPlaying = false;
+      _playingItemId = current.id;
+    }
 
     return PopScope(
       canPop: session.queueCount == 0,
@@ -320,6 +360,7 @@ class _TriagePageState extends ConsumerState<TriagePage> {
                     onSwipeUp: notifier.classifyWithLastUsedAlbum,
                     onSwipeDown: () => _openAlbumPanel(current.albumId),
                     lastUsedAlbumLabel: lastUsedAlbumLabel,
+                    isPlaying: _isPlaying,
                   ),
                   // Overlay topo-esquerdo (6.2.10). Desabilitado com a
                   // pilha vazia — `onPressed: null` já cobre isso, sem
@@ -331,6 +372,16 @@ class _TriagePageState extends ConsumerState<TriagePage> {
                       icon: const Icon(Icons.undo),
                       tooltip: 'Desfazer',
                       onPressed: session.canUndo ? notifier.undo : null,
+                    ),
+                  ),
+                  // Overlay topo-direito (6.2.11).
+                  Positioned(
+                    top: 8,
+                    right: 8,
+                    child: IconButton.filledTonal(
+                      icon: const Icon(Icons.info_outline),
+                      tooltip: 'Informações',
+                      onPressed: () => showMediaInfoModal(context, current),
                     ),
                   ),
                   // Pílula de último álbum (6.2.18) — affordance sempre
@@ -400,6 +451,9 @@ class _TriagePageState extends ConsumerState<TriagePage> {
               onDelete: notifier.markForDeletion,
               onSkip: notifier.skip,
               onKeep: notifier.keep,
+              isVideo: current.isVideo,
+              isPlaying: _isPlaying,
+              onTogglePlay: () => setState(() => _isPlaying = !_isPlaying),
             ),
           ],
         ),

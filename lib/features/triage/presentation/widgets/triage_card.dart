@@ -1,4 +1,3 @@
-
 import 'dart:math' as math;
 
 import 'package:flutter/gestures.dart' show kTouchSlop;
@@ -29,6 +28,10 @@ class TriageCard extends StatefulWidget {
   /// swipe para cima. Nulo = pílula não renderizada e gesto inerte.
   final String? lastUsedAlbumLabel;
 
+  /// 6.2.17 — repassado ao `MediaCard` do item ativo só; nunca ao
+  /// `behind`.
+  final bool isPlaying;
+
   /// Card de baixo da pilha. Opcional: sem ele o efeito continua, só
   /// perde a sensação de profundidade.
   final Widget? behind;
@@ -40,6 +43,7 @@ class TriageCard extends StatefulWidget {
     required this.onSwipeUp,
     required this.onSwipeDown,
     required this.lastUsedAlbumLabel,
+    this.isPlaying = false,
     this.behind,
     super.key,
   });
@@ -207,7 +211,7 @@ class _TriageCardState extends State<TriageCard>
           animation: _controller,
           // Fora do builder: a árvore da mídia não reconstrói a cada
           // frame de mola nem de arrasto, só o Transform.
-          child: MediaCard(item: widget.item),
+          child: MediaCard(item: widget.item, isPlaying: widget.isPlaying),
           builder: (context, child) {
             final horizontalProgress = _horizontalProgress;
             final verticalProgress = _verticalProgress;

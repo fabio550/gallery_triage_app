@@ -1,9 +1,11 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gallery_triage_app/core/application/providers/last_used_album_provider.dart';
 import 'package:gallery_triage_app/core/domain/entities/media_item_entity.dart';
+import 'package:gallery_triage_app/core/domain/enums/deletion_mode.dart';
 import 'package:gallery_triage_app/core/domain/enums/triage_decision.dart';
 import 'package:gallery_triage_app/core/domain/models/category_summary.dart';
 import 'package:gallery_triage_app/features/dashboard/infrastructure/data/mock_media_items.dart';
+import 'package:gallery_triage_app/features/triage/application/deletion_summary.dart';
 import 'package:gallery_triage_app/features/triage/application/triage_session_state.dart';
 import 'package:gallery_triage_app/features/triage/application/undo_entry.dart';
 
@@ -237,12 +239,21 @@ class TriageSessionNotifier extends Notifier<TriageSessionState> {
   /// restauração) e definitivo só existe de fato no índice persistido
   /// e no canal nativo, nenhum dos dois existe nesta fase. Sem eles,
   /// manter um item "na lixeira do sistema" apenas em memória não teria
-  /// como ser restaurado depois — só criaria um estado morto. O modo
-  /// escolhido ainda importa para o texto do resumo (6.4.5), que quem
-  /// chama monta a partir de `deletionModeProvider`.
-  void confirmDeletion(List<String> itemIds) {
+  /// como ser restaurado depois — só criaria um estado morto.
+  ///
+  /// `mode` só importa aqui pra compor o [DeletionSummary] (6.4.1) —
+  /// não muda o que acontece com os itens, os dois removem da sessão.
+  void confirmDeletion(List<String> itemIds, DeletionMode mode) {
     final oldItems = state.items;
+    final removed = oldItems.where((i) => itemIds.contains(i.id)).toList();
     final newItems = oldItems.where((i) => !itemIds.contains(i.id)).toList();
+
+    final freedBytes = removed.fold<int>(0, (sum, i) => sum + i.sizeBytes);
+    final summary = DeletionSummary(
+      count: removed.length,
+      mode: mode,
+      freedBytes: freedBytes,
+    );
 
     final currentId = state.currentIndex < oldItems.length
         ? oldItems[state.currentIndex].id
@@ -257,7 +268,11 @@ class TriageSessionNotifier extends Notifier<TriageSessionState> {
             ? 0
             : state.currentIndex.clamp(0, newItems.length));
 
-    state = state.copyWith(items: newItems, currentIndex: newIndex);
+    state = state.copyWith(
+      items: newItems,
+      currentIndex: newIndex,
+      lastDeletionSummary: summary,
+    );
   }
 
   void _pushUndo(MediaItemEntity beforeAction) {

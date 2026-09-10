@@ -179,7 +179,7 @@ class _TriageReviewPageState extends ConsumerState<TriageReviewPage> {
     ref.read(deletionModeProvider.notifier).set(confirmedMode);
     ref
         .read(triageSessionProvider(widget.categoryRef).notifier)
-        .confirmDeletion(selected.map((i) => i.id).toList());
+        .confirmDeletion(selected.map((i) => i.id).toList(), confirmedMode);
 
     // 6.4.1 — texto condicionado ao modo (4.4.5). Quem exibe é o
     // TriagePage: 6.4.5 manda voltar pra lá, então o resumo não faz
