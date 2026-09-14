@@ -1,10 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:gallery_triage_app/core/application/providers/thumbnail_provider.dart';
 import 'package:gallery_triage_app/core/domain/entities/media_item_entity.dart';
 import 'package:gallery_triage_app/core/presentation/theme/triage_colors.dart';
 import 'package:gallery_triage_app/core/presentation/theme/triage_visual_state.dart';
 import 'package:gallery_triage_app/core/presentation/widgets/media_placeholder.dart';
 
-class CarouselThumb extends StatelessWidget {
+/// 8.5 — "requisitadas em aproximadamente 200x200".
+const _thumbSize = 200;
+
+class CarouselThumb extends ConsumerWidget {
   final MediaItemEntity item;
   final bool isActive;
   final VoidCallback onTap;
@@ -17,8 +22,9 @@ class CarouselThumb extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final stateColor = TriageVisualState.of(item).colorIn(context.triageColors);
+    final thumbnail = ref.watch(thumbnailProvider((item.mediaStoreId, _thumbSize)));
 
     return GestureDetector(
       onTap: onTap,
@@ -46,6 +52,7 @@ class CarouselThumb extends StatelessWidget {
               : const [],
         ),
         child: Container(
+          clipBehavior: Clip.antiAlias,
           decoration: BoxDecoration(
             color: mediaPlaceholderColor(item.id),
             borderRadius: BorderRadius.circular(9),
@@ -53,11 +60,23 @@ class CarouselThumb extends StatelessWidget {
             // ativo ou não.
             border: Border.all(color: stateColor, width: 2),
           ),
-          child: item.isVideo
-              ? const Center(
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              thumbnail.when(
+                data: (bytes) => bytes == null
+                    ? const SizedBox.shrink()
+                    : Image.memory(bytes, fit: BoxFit.cover),
+                loading: () => const SizedBox.shrink(),
+                error: (Object error, StackTrace stackTrace) =>
+                    const SizedBox.shrink(),
+              ),
+              if (item.isVideo)
+                const Center(
                   child: Icon(Icons.videocam, size: 16, color: Colors.white70),
-                )
-              : null,
+                ),
+            ],
+          ),
         ),
       ),
     );

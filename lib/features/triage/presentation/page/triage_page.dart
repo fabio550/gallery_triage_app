@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:gallery_triage_app/core/application/providers/albums_provider.dart';
 import 'package:gallery_triage_app/core/application/providers/last_used_album_provider.dart';
+import 'package:gallery_triage_app/core/domain/entities/album_entity.dart';
 import 'package:gallery_triage_app/core/domain/enums/deletion_mode.dart';
 import 'package:gallery_triage_app/core/domain/models/category_summary.dart';
 import 'package:gallery_triage_app/core/presentation/widgets/progress_bar.dart';
-import 'package:gallery_triage_app/features/dashboard/infrastructure/data/mock_media_items.dart';
 import 'package:gallery_triage_app/features/triage/application/deletion_summary.dart';
 import 'package:gallery_triage_app/features/triage/application/triage_session_notifier.dart';
 import 'package:gallery_triage_app/features/triage/presentation/page/triage_review_page.dart';
@@ -25,6 +26,17 @@ String _deletionSummaryText(DeletionSummary summary) {
       ? '${summary.count} itens movidos para a lixeira do sistema '
           '(retidos por cerca de 30 dias).'
       : '${summary.count} itens excluídos — $mb MB liberados.';
+}
+
+/// Nome do álbum de `lastUsedAlbumId` (6.2.18) — `null` se a lista
+/// ainda não carregou ou o álbum não existe mais (2.6.3 cobre a
+/// limpeza da preferência; até isso rodar, a pílula some sozinha por
+/// falta de nome).
+String? _albumName(List<AlbumEntity> albums, String albumId) {
+  for (final album in albums) {
+    if (album.id == albumId) return album.name;
+  }
+  return null;
 }
 
 /// Sem estado próprio de triagem (2.1.2 — "Nenhum estado de triagem
@@ -180,8 +192,9 @@ class _TriagePageState extends ConsumerState<TriagePage> {
     final notifier = ref.read(provider.notifier);
 
     final lastUsedAlbumId = ref.watch(lastUsedAlbumProvider);
+    final albums = ref.watch(albumsProvider);
     final lastUsedAlbumLabel =
-        lastUsedAlbumId == null ? null : MockAlbums.names[lastUsedAlbumId];
+        lastUsedAlbumId == null ? null : _albumName(albums, lastUsedAlbumId);
 
     if (session.isLoading) {
       return Scaffold(
@@ -311,8 +324,8 @@ class _TriagePageState extends ConsumerState<TriagePage> {
             children: [
               Text(category.label),
               // `session.totalCount` em vez de `category.totalItems`:
-              // os dois vêm do mesmo `MockMediaItems.forCategory`, mas
-              // usar o da sessão evita depender de dois caminhos de
+              // os dois vêm do mesmo `TriageRepository.itemsForCategory`,
+              // mas usar o da sessão evita depender de dois caminhos de
               // agregação ficarem sincronizados manualmente.
               Text(
                 'Item ${session.currentIndex + 1} de ${session.totalCount}',

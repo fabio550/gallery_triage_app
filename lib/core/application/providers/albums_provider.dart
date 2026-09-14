@@ -1,67 +1,43 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:gallery_triage_app/core/application/providers/triage_repository_provider.dart';
 import 'package:gallery_triage_app/core/domain/entities/album_entity.dart';
-import 'package:gallery_triage_app/features/dashboard/infrastructure/data/mock_media_items.dart';
 
-/// Nome de álbum inválido ou duplicado (7 — "erro inline no campo, sem
-/// fechar o diálogo").
-class AlbumNameException implements Exception {
-  const AlbumNameException(this.message);
-  final String message;
-}
-
-final albumsProvider =
-    NotifierProvider<AlbumsNotifier, List<AlbumEntity>>(AlbumsNotifier.new);
+final albumsProvider = NotifierProvider<AlbumsNotifier, List<AlbumEntity>>(
+  AlbumsNotifier.new,
+);
 
 /// Registro global de álbuns — não escopado por categoria, como o
-/// próprio conceito de álbum (2.2.2). Em memória por enquanto; migra
-/// para o índice local quando o Drift existir.
-///
-/// Semeado com os 3 álbuns de [MockAlbums] para manter os `albumId` já
-/// gravados em `mock_media_items.dart` válidos. Álbuns criados pelo
-/// painel (6.2.16) entram aqui, não em [MockAlbums] — aquele mapa fica
-/// só como lookup do dataset original.
+/// próprio conceito de álbum (2.2.2). Persistido via Drift
+/// (`TriageRepository.albums()`/`createAlbum()`); `build()` retorna
+/// vazio de imediato e o valor real chega assíncrono, mesmo padrão do
+/// `TriageSessionNotifier`/`DeletionModeNotifier`.
 class AlbumsNotifier extends Notifier<List<AlbumEntity>> {
+  late final _repository = ref.read(triageRepositoryProvider);
+
   @override
   List<AlbumEntity> build() {
-    final seedDate = DateTime(2025, 1, 1);
-    return [
-      AlbumEntity(id: MockAlbums.familia, name: 'Família', createdAt: seedDate),
-      AlbumEntity(id: MockAlbums.viagens, name: 'Viagens', createdAt: seedDate),
-      AlbumEntity(
-        id: MockAlbums.documentos,
-        name: 'Documentos',
-        createdAt: seedDate,
-      ),
-    ];
+    _load();
+    return const [];
   }
 
-  /// Regras de 6.5.3, antecipadas aqui porque o painel (6.2.16) já cria
-  /// álbum pela via rápida, antes de existir a tela de gestão em si.
-  /// Retorna o id do álbum criado.
-  String create(String rawName) {
-    final name = rawName.trim();
+  Future<void> _load() async {
+    final albums = await _repository.albums();
+    if (ref.mounted) state = albums;
+  }
 
-    if (name.isEmpty) {
-      throw const AlbumNameException('Digite um nome para o álbum.');
-    }
-    if (name.length > 64) {
-      throw const AlbumNameException('Nome muito longo (máximo 64 caracteres).');
-    }
-    if (RegExp(r'[/\\:*?"<>|]').hasMatch(name)) {
-      throw const AlbumNameException('Nome não pode conter / \\ : * ? " < > |');
-    }
-    final duplicate =
-        state.any((a) => a.name.toLowerCase() == name.toLowerCase());
-    if (duplicate) {
-      throw const AlbumNameException('Já existe um álbum com esse nome.');
-    }
-
-    final album = AlbumEntity(
-      id: 'album-${DateTime.now().microsecondsSinceEpoch}',
-      name: name,
-      createdAt: DateTime.now(),
-    );
+  /// Regras de 6.5.3 (nome único, ≤64 caracteres, caracteres
+  /// proibidos) são validadas pelo `TriageRepository`, que lança
+  /// `AlbumNameException` — o painel (6.2.16) trata isso inline, sem
+  /// fechar o diálogo (§7). Retorna o id do álbum criado.
+  Future<String> create(String rawName) async {
+    final album = await _repository.createAlbum(rawName);
     state = [...state, album];
     return album.id;
   }
+
+  /// Reavalia a lista — usado depois de qualquer escrita feita por
+  /// fora deste notifier (nenhuma ainda, mas mantém o estado
+  /// reconciliável se um dia existir gestão de álbuns fora daqui,
+  /// 6.5.2/P-08).
+  Future<void> refresh() => _load();
 }

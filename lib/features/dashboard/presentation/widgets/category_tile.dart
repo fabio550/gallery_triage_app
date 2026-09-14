@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:gallery_triage_app/core/application/providers/thumbnail_provider.dart';
 import 'package:gallery_triage_app/core/domain/models/category_summary.dart';
 import 'package:gallery_triage_app/core/presentation/theme/triage_colors.dart';
 import 'package:gallery_triage_app/core/presentation/widgets/progress_bar.dart';
@@ -32,7 +34,7 @@ class CategoryTile extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
         child: Row(
           children: [
-            _Cover(itemId: summary.coverItemId),
+            _Cover(mediaStoreId: summary.coverMediaStoreId),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
@@ -77,22 +79,50 @@ class CategoryTile extends StatelessWidget {
   }
 }
 
-class _Cover extends StatelessWidget {
-  const _Cover({this.itemId});
- 
-  final String? itemId;
- 
+class _Cover extends ConsumerWidget {
+  const _Cover({this.mediaStoreId});
+
+  final int? mediaStoreId;
+
   @override
-  Widget build(BuildContext context) {
-    // Placeholder até o provider de miniatura existir. Falha de leitura
-    // não impede a linha de funcionar (§7).
-    return Container(
-      width: 72,
-      height: 72,
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerHigh,
-        borderRadius: BorderRadius.circular(12),
+  Widget build(BuildContext context, WidgetRef ref) {
+    final radius = BorderRadius.circular(12);
+    final id = mediaStoreId;
+
+    // Sem capa (categoria de álbuns, cujo `coverMediaStoreId` pode não
+    // ter chegado ainda) — placeholder liso. Falha de leitura não
+    // impede a linha de funcionar (§7).
+    if (id == null) {
+      return Container(
+        width: 72,
+        height: 72,
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surfaceContainerHigh,
+          borderRadius: radius,
+        ),
+      );
+    }
+
+    final thumbnail = ref.watch(thumbnailProvider((id, 200)));
+
+    return ClipRRect(
+      borderRadius: radius,
+      child: SizedBox(
+        width: 72,
+        height: 72,
+        child: thumbnail.when(
+          data: (bytes) => bytes == null
+              ? _placeholder(context)
+              : Image.memory(bytes, fit: BoxFit.cover),
+          loading: () => _placeholder(context),
+          error: (Object error, StackTrace stackTrace) =>
+              _placeholder(context),
+        ),
       ),
     );
   }
+
+  Widget _placeholder(BuildContext context) => Container(
+        color: Theme.of(context).colorScheme.surfaceContainerHigh,
+      );
 }

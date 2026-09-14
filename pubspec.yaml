@@ -47,6 +47,7 @@ dependencies:
   # Revisitar quando o AGP local suportar compileSdk 37 de verdade.
   permission_handler: ^12.0.3
   device_info_plus: ^13.2.0
+  photo_manager: ^3.12.0
 
 dev_dependencies:
   flutter_test:

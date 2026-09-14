@@ -7,7 +7,6 @@ import 'package:gallery_triage_app/core/domain/enums/triage_decision.dart';
 import 'package:gallery_triage_app/core/domain/exceptions/album_name_exception.dart';
 import 'package:gallery_triage_app/core/domain/models/category_summary.dart';
 import 'package:gallery_triage_app/core/domain/repositories/triage_repository.dart';
-import 'package:gallery_triage_app/features/dashboard/infrastructure/data/mock_media_items.dart';
 
 import 'app_database.dart';
 
@@ -16,7 +15,21 @@ class DriftTriageRepository implements TriageRepository {
 
   final AppDatabase _db;
 
-  static final DateTime _seedDate = DateTime(2025, 1, 1);
+  static const _monthNames = [
+    '',
+    'Janeiro',
+    'Fevereiro',
+    'Março',
+    'Abril',
+    'Maio',
+    'Junho',
+    'Julho',
+    'Agosto',
+    'Setembro',
+    'Outubro',
+    'Novembro',
+    'Dezembro',
+  ];
 
   @override
   Future<List<MediaItemEntity>> itemsForCategory(CategoryRef ref) async {
@@ -34,6 +47,87 @@ class DriftTriageRepository implements TriageRepository {
     return _db
         .into(_db.mediaItemsTable)
         .insertOnConflictUpdate(_toCompanion(item));
+  }
+
+  @override
+  Future<void> upsertScanned(List<MediaItemEntity> items) async {
+    if (items.isEmpty) return;
+    // 5.2.3 — uma transação por lote; quem chama já divide em lotes de
+    // 500 a 1000. `OnConflictUpdate` em vez de insert puro: idempotente
+    // se o `SyncService` alguma vez reprocessar um `mediaStoreId` já
+    // gravado (ex.: no reinício de um primeiro scan interrompido).
+    await _db.batch((batch) {
+      batch.insertAllOnConflictUpdate(
+        _db.mediaItemsTable,
+        items.map(_toCompanion).toList(),
+      );
+    });
+  }
+
+  @override
+  Future<Set<int>> indexedMediaStoreIds() async {
+    final query = _db.selectOnly(_db.mediaItemsTable)
+      ..addColumns([_db.mediaItemsTable.mediaStoreId]);
+    final rows = await query.get();
+    return rows.map((r) => r.read(_db.mediaItemsTable.mediaStoreId)!).toSet();
+  }
+
+  @override
+  Future<void> markUnavailable(Set<int> mediaStoreIds) async {
+    if (mediaStoreIds.isEmpty) return;
+    await (_db.update(_db.mediaItemsTable)
+          ..where((t) => t.mediaStoreId.isIn(mediaStoreIds)))
+        .write(const MediaItemsTableCompanion(isAvailable: Value(false)));
+  }
+
+  @override
+  Future<List<CategorySummary>> categoriesFor(
+    CategoryGranularity granularity,
+  ) async {
+    // 8.3 — o ideal seria `COUNT`/`SUM` agregado por SQL; aqui o
+    // agregado é feito em Dart sobre uma projeção já filtrada por
+    // 6.1.10 (trashedInSystem/isAvailable). Simplificação pragmática
+    // enquanto o volume real (8.1) não exige o caminho puramente SQL —
+    // revisitar depois da medição de performance (8.9/P-02).
+    final rows = await (_db.select(_db.mediaItemsTable)
+          ..where(
+            (t) => t.trashedInSystem.equals(false) & t.isAvailable.equals(true),
+          ))
+        .get();
+    final items = rows.map(_toEntity).toList();
+
+    switch (granularity) {
+      case CategoryGranularity.all:
+        return _summarizeAll(items);
+      case CategoryGranularity.month:
+        return _summarizeByMonth(items);
+      case CategoryGranularity.year:
+        return _summarizeByYear(items);
+      case CategoryGranularity.type:
+        return _summarizeByType(items);
+      case CategoryGranularity.album:
+        final albumList = await albums();
+        return _summarizeByAlbum(items, albumList);
+    }
+  }
+
+  @override
+  Future<Map<String, int>> albumItemCounts() async {
+    final rows = await (_db.select(_db.mediaItemsTable)
+          ..where(
+            (t) =>
+                t.trashedInSystem.equals(false) &
+                t.isAvailable.equals(true) &
+                t.albumId.isNotNull(),
+          ))
+        .get();
+    final counts = <String, int>{};
+    for (final row in rows) {
+      final id = row.albumId;
+      if (id == null) continue;
+      counts[id] = (counts[id] ?? 0) + 1;
+    }
+    return counts;
   }
 
   @override
@@ -84,40 +178,6 @@ class DriftTriageRepository implements TriageRepository {
           ),
         );
     return album;
-  }
-
-  @override
-  Future<void> seedIfEmpty() async {
-    final countExpr = _db.mediaItemsTable.id.count();
-    final result = await (_db.selectOnly(_db.mediaItemsTable)
-          ..addColumns([countExpr]))
-        .getSingle();
-    final existing = result.read(countExpr) ?? 0;
-    if (existing > 0) return;
-
-    await _db.batch((batch) {
-      batch.insertAll(_db.albumsTable, [
-        AlbumsTableCompanion.insert(
-          id: MockAlbums.familia,
-          name: 'Família',
-          createdAt: _seedDate,
-        ),
-        AlbumsTableCompanion.insert(
-          id: MockAlbums.viagens,
-          name: 'Viagens',
-          createdAt: _seedDate,
-        ),
-        AlbumsTableCompanion.insert(
-          id: MockAlbums.documentos,
-          name: 'Documentos',
-          createdAt: _seedDate,
-        ),
-      ]);
-      batch.insertAll(
-        _db.mediaItemsTable,
-        MockMediaItems.all.map(_toCompanion).toList(),
-      );
-    });
   }
 
   @override
@@ -224,5 +284,156 @@ class DriftTriageRepository implements TriageRepository {
   DateTime _monthStart(String key) {
     final parts = key.split('-');
     return DateTime(int.parse(parts[0]), int.parse(parts[1]), 1);
+  }
+
+  // --- Agregação do Dashboard (6.1) --------------------------------------
+  //
+  // Porta direta da lógica que vivia em `MockCategories`, agora sobre
+  // itens vindos do Drift em vez do dataset mockado — mesmas regras
+  // (6.1.2, 6.1.5, 6.1.8), incluindo o fix de 3.2.5 (item classificado
+  // que caiu na fila não conta como mantido nem como classificado).
+
+  /// `null` se a categoria não tiver nenhum item — evita gerar um
+  /// `CategoryTile` para um recorte vazio (6.1.11). `items` já chega
+  /// filtrado por 6.1.10, então não repete o filtro aqui.
+  CategorySummary? _summarize(
+    CategoryRef ref,
+    String label,
+    List<MediaItemEntity> items,
+  ) {
+    if (items.isEmpty) return null;
+
+    final kept =
+        items.where((i) => i.decision == TriageDecision.kept).toList();
+    final classified = kept.where((i) => i.albumId != null).length;
+    final sizeBytes = items.fold<int>(0, (sum, i) => sum + i.sizeBytes);
+
+    // P-10 — origem da capa: item mais recente do recorte.
+    final sorted = [...items]..sort((a, b) => b.dateTaken.compareTo(a.dateTaken));
+
+    return CategorySummary(
+      ref: ref,
+      label: label,
+      totalItems: items.length,
+      keptItems: kept.length,
+      classifiedItems: classified,
+      sizeBytes: sizeBytes,
+      coverMediaStoreId: sorted.first.mediaStoreId,
+    );
+  }
+
+  List<CategorySummary> _summarizeAll(List<MediaItemEntity> items) {
+    final summary = _summarize(
+      const CategoryRef(granularity: CategoryGranularity.all, key: 'all'),
+      'Todos os itens',
+      items,
+    );
+    return summary == null ? const [] : [summary];
+  }
+
+  String _monthKey(DateTime d) =>
+      '${d.year}-${d.month.toString().padLeft(2, '0')}';
+
+  List<CategorySummary> _summarizeByMonth(List<MediaItemEntity> items) {
+    final byKey = <String, List<MediaItemEntity>>{};
+    for (final item in items) {
+      byKey.putIfAbsent(_monthKey(item.dateTaken), () => []).add(item);
+    }
+    final keys = byKey.keys.toList()..sort((a, b) => b.compareTo(a));
+
+    return keys
+        .map((key) {
+          final parts = key.split('-');
+          final month = int.parse(parts[1]);
+          final label = '${_monthNames[month]} de ${parts[0]}';
+          return _summarize(
+            CategoryRef(granularity: CategoryGranularity.month, key: key),
+            label,
+            byKey[key]!,
+          );
+        })
+        .whereType<CategorySummary>()
+        .toList();
+  }
+
+  List<CategorySummary> _summarizeByYear(List<MediaItemEntity> items) {
+    final byKey = <String, List<MediaItemEntity>>{};
+    for (final item in items) {
+      byKey.putIfAbsent(item.dateTaken.year.toString(), () => []).add(item);
+    }
+    final keys = byKey.keys.toList()..sort((a, b) => b.compareTo(a));
+
+    return keys
+        .map((key) => _summarize(
+              CategoryRef(granularity: CategoryGranularity.year, key: key),
+              key,
+              byKey[key]!,
+            ))
+        .whereType<CategorySummary>()
+        .toList();
+  }
+
+  List<CategorySummary> _summarizeByType(List<MediaItemEntity> items) {
+    // Ordem fixa (6.1.8). Tipo não forma partição (6.1.5): Imagens
+    // contém Fotos e Screenshots.
+    final photos = items
+        .where((i) => i.mediaType == MediaType.image && !i.isScreenshot)
+        .toList();
+    final screenshots = items
+        .where((i) => i.mediaType == MediaType.image && i.isScreenshot)
+        .toList();
+    final images = items.where((i) => i.mediaType == MediaType.image).toList();
+    final videos = items.where((i) => i.mediaType == MediaType.video).toList();
+
+    return [
+      _summarize(
+        const CategoryRef(granularity: CategoryGranularity.type, key: 'photos'),
+        'Fotos',
+        photos,
+      ),
+      _summarize(
+        const CategoryRef(
+          granularity: CategoryGranularity.type,
+          key: 'screenshots',
+        ),
+        'Screenshots',
+        screenshots,
+      ),
+      _summarize(
+        const CategoryRef(granularity: CategoryGranularity.type, key: 'images'),
+        'Imagens',
+        images,
+      ),
+      _summarize(
+        const CategoryRef(granularity: CategoryGranularity.type, key: 'videos'),
+        'Vídeos',
+        videos,
+      ),
+    ].whereType<CategorySummary>().toList();
+  }
+
+  List<CategorySummary> _summarizeByAlbum(
+    List<MediaItemEntity> items,
+    List<AlbumEntity> albumList,
+  ) {
+    final names = {for (final a in albumList) a.id: a.name};
+    final byAlbum = <String, List<MediaItemEntity>>{};
+    for (final item in items) {
+      final albumId = item.albumId;
+      if (albumId == null) continue;
+      byAlbum.putIfAbsent(albumId, () => []).add(item);
+    }
+    // 6.1.8 — álbuns por nome.
+    final ids = byAlbum.keys.toList()
+      ..sort((a, b) => (names[a] ?? a).compareTo(names[b] ?? b));
+
+    return ids
+        .map((id) => _summarize(
+              CategoryRef(granularity: CategoryGranularity.album, key: id),
+              names[id] ?? id,
+              byAlbum[id]!,
+            ))
+        .whereType<CategorySummary>()
+        .toList();
   }
 }

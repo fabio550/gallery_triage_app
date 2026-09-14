@@ -47,10 +47,9 @@ class TriageSessionNotifier extends Notifier<TriageSessionState> {
 
   /// `build()` não pode ser `async` (2.6, handoff) — carrega em
   /// background e substitui o estado quando a consulta ao Drift
-  /// responder. `seedIfEmpty` é idempotente (uma query COUNT), o custo
-  /// de chamar a cada categoria aberta é desprezível.
+  /// responder. Índice já vem populado pelo `SyncService` (5.2/5.3)
+  /// antes de qualquer categoria ser aberta — sem seed mockado.
   Future<void> _load() async {
-    await _repository.seedIfEmpty();
     final items = await _repository.itemsForCategory(_categoryRef);
     if (!ref.mounted) return;
     state = state.copyWith(

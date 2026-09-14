@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gallery_triage_app/core/application/providers/media_permission_provider.dart';
 import 'package:gallery_triage_app/core/domain/enums/media_permission_status.dart';
-import 'package:gallery_triage_app/features/dashboard/presentation/pages/dashboard_page.dart';
+import 'package:gallery_triage_app/core/presentation/widgets/sync_gate.dart';
 import 'package:gallery_triage_app/features/permission/presentation/pages/permission_checking_page.dart';
 import 'package:gallery_triage_app/features/permission/presentation/pages/permission_denied_page.dart';
 import 'package:gallery_triage_app/features/permission/presentation/widgets/partial_access_banner.dart';
@@ -26,11 +26,11 @@ class PermissionGate extends ConsumerWidget {
       error: (Object error, StackTrace stackTrace) =>
           const PermissionDeniedPage(),
       data: (status) => switch (status) {
-        MediaPermissionStatus.granted => const DashboardPage(),
-        // 4.2.1 — o Dashboard funciona normalmente, só com o aviso
+        MediaPermissionStatus.granted => const SyncGate(),
+        // 4.2.1 — sync/Dashboard funcionam normalmente, só com o aviso
         // persistente no topo.
         MediaPermissionStatus.limited => const Column(
-          children: [PartialAccessBanner(), Expanded(child: DashboardPage())],
+          children: [PartialAccessBanner(), Expanded(child: SyncGate())],
         ),
         MediaPermissionStatus.denied ||
         MediaPermissionStatus.permanentlyDenied =>

@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gallery_triage_app/core/application/providers/albums_provider.dart';
+import 'package:gallery_triage_app/core/application/providers/categories_provider.dart';
 import 'package:gallery_triage_app/core/domain/entities/album_entity.dart';
+import 'package:gallery_triage_app/core/domain/exceptions/album_name_exception.dart';
 import 'package:gallery_triage_app/core/presentation/widgets/media_placeholder.dart';
-import 'package:gallery_triage_app/features/dashboard/infrastructure/data/mock_media_items.dart';
 
 /// Bottom sheet de 6.2.16. Devolve o id do álbum escolhido (existente
 /// ou recém-criado) via `Navigator.pop`, ou `null` se fechado sem
@@ -36,23 +37,6 @@ class _AlbumPanelState extends ConsumerState<AlbumPanel> {
     super.dispose();
   }
 
-  /// Contagem global por álbum. Nota: soma sobre o dataset mockado
-  /// original (`MockMediaItems.all`), não sobre nenhuma sessão de
-  /// triagem em memória — cada categoria mantém sua própria cópia
-  /// mutada dos itens (Etapa 2), então mudanças feitas na sessão atual
-  /// só aparecem aqui depois que existir um índice único de verdade
-  /// (Drift). Aceitável para a fase mockada; documentado, não
-  /// escondido.
-  Map<String, int> _counts() {
-    final counts = <String, int>{};
-    for (final item in MockMediaItems.all) {
-      final id = item.albumId;
-      if (id == null) continue;
-      counts[id] = (counts[id] ?? 0) + 1;
-    }
-    return counts;
-  }
-
   /// 6.2.16 — com itens por contagem decrescente, depois vazios em
   /// ordem alfabética.
   List<AlbumEntity> _ordered(List<AlbumEntity> albums, Map<String, int> counts) {
@@ -76,7 +60,10 @@ class _AlbumPanelState extends ConsumerState<AlbumPanel> {
   @override
   Widget build(BuildContext context) {
     final albums = ref.watch(albumsProvider);
-    final counts = _counts();
+    // Riverpod 3.x: `.value` já é nullable, cumpre o papel do antigo
+    // `valueOrNull` — enquanto carrega, o painel mostra os álbuns com
+    // contagem 0 em vez de travar numa tela de loading.
+    final counts = ref.watch(albumItemCountsProvider).value ?? const {};
     final ordered = _ordered(albums, counts);
 
     return SafeArea(
@@ -160,12 +147,14 @@ class _AlbumPanelState extends ConsumerState<AlbumPanel> {
               child: const Text('Cancelar'),
             ),
             FilledButton(
-              onPressed: () {
+              onPressed: () async {
                 try {
-                  final id = ref
+                  final id = await ref
                       .read(albumsProvider.notifier)
                       .create(nameController.text);
-                  Navigator.of(dialogContext).pop(id);
+                  if (dialogContext.mounted) {
+                    Navigator.of(dialogContext).pop(id);
+                  }
                 } on AlbumNameException catch (e) {
                   setDialogState(() => errorText = e.message);
                 }

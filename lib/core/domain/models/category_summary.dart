@@ -8,7 +8,7 @@ class CategorySummary {
     required this.keptItems,
     required this.classifiedItems,
     required this.sizeBytes,
-    this.coverItemId,
+    this.coverMediaStoreId,
   }) : assert(
           classifiedItems <= keptItems && keptItems <= totalItems,
           'classificado é subconjunto de mantido (3.2.1)',
@@ -28,7 +28,11 @@ class CategorySummary {
   final int classifiedItems;
 
   final int sizeBytes;
-  final String? coverItemId;
+
+  /// `mediaStoreId` (não o UUID de domínio) — é o que o
+  /// `MediaRepository`/`photo_manager` precisa pra buscar a miniatura
+  /// real (8.5).
+  final int? coverMediaStoreId;
 
   int get undecidedItems => totalItems - keptItems;
 
