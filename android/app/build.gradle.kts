@@ -6,7 +6,9 @@ plugins {
 
 android {
     namespace = "com.example.gallery_triage_app"
-    compileSdk = flutter.compileSdkVersion
+    // 4.1.3 — igual ao targetSdk, não ao que a instalação local do
+    // Flutter trouxer por padrão.
+    compileSdk = 36
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
@@ -19,8 +21,16 @@ android {
         applicationId = "com.example.gallery_triage_app"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = flutter.minSdkVersion
-        targetSdk = flutter.targetSdkVersion
+        //
+        // 4.1.1 — minSdk 30 (Android 11): createDeleteRequest,
+        // createTrashRequest, colunas de geração do MediaStore e
+        // QUERY_ARG_MATCH_TRASHED, sem o caminho legado de API 29.
+        // 4.1.2 — targetSdk 36 (Android 16): exigido pela Play Store
+        // para apps novos/atualizados a partir de 31/08/2026. Nenhum
+        // dos dois vem de `flutter.*Version` porque esses valores
+        // seguem a instalação local do Flutter, não a spec.
+        minSdk = 30
+        targetSdk = 36
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }
