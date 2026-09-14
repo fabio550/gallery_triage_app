@@ -35,8 +35,10 @@ class _PermissionDeniedPageState extends ConsumerState<PermissionDeniedPage> {
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
     final scheme = Theme.of(context).colorScheme;
+    // Riverpod 3.x: `.value` já é o getter nullable (equivalente ao
+    // `valueOrNull` da v2) — não lança em erro/loading.
     final status =
-        ref.watch(mediaPermissionProvider).valueOrNull ??
+        ref.watch(mediaPermissionProvider).value ??
             MediaPermissionStatus.denied;
     final isPermanent = status == MediaPermissionStatus.permanentlyDenied;
 
