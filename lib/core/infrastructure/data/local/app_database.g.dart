@@ -1,11 +1,4 @@
 // GENERATED CODE - DO NOT MODIFY BY HAND
-//
-// NOTA: o bloco de `PreferencesTable` foi escrito à mão neste ambiente
-// sem SDK do Dart/Flutter disponível (sem `drift_dev`/`build_runner`
-// pra rodar). Ele segue fielmente o padrão das demais tabelas geradas
-// neste arquivo, mas fica obsoleto assim que alguém rodar
-// `dart run build_runner build` com o SDK real — o gerador substitui
-// este arquivo inteiro, então isso é esperado e seguro.
 
 part of 'app_database.dart';
 
@@ -2342,6 +2335,170 @@ typedef $$AlbumsTableTableProcessedTableManager =
       AlbumsTableData,
       PrefetchHooks Function()
     >;
+typedef $$PreferencesTableTableCreateCompanionBuilder =
+    PreferencesTableCompanion Function({
+      required String key,
+      required String value,
+      Value<int> rowid,
+    });
+typedef $$PreferencesTableTableUpdateCompanionBuilder =
+    PreferencesTableCompanion Function({
+      Value<String> key,
+      Value<String> value,
+      Value<int> rowid,
+    });
+
+class $$PreferencesTableTableFilterComposer
+    extends Composer<_$AppDatabase, $PreferencesTableTable> {
+  $$PreferencesTableTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get key => $composableBuilder(
+    column: $table.key,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get value => $composableBuilder(
+    column: $table.value,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$PreferencesTableTableOrderingComposer
+    extends Composer<_$AppDatabase, $PreferencesTableTable> {
+  $$PreferencesTableTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get key => $composableBuilder(
+    column: $table.key,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get value => $composableBuilder(
+    column: $table.value,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$PreferencesTableTableAnnotationComposer
+    extends Composer<_$AppDatabase, $PreferencesTableTable> {
+  $$PreferencesTableTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get key =>
+      $composableBuilder(column: $table.key, builder: (column) => column);
+
+  GeneratedColumn<String> get value =>
+      $composableBuilder(column: $table.value, builder: (column) => column);
+}
+
+class $$PreferencesTableTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $PreferencesTableTable,
+          PreferencesTableData,
+          $$PreferencesTableTableFilterComposer,
+          $$PreferencesTableTableOrderingComposer,
+          $$PreferencesTableTableAnnotationComposer,
+          $$PreferencesTableTableCreateCompanionBuilder,
+          $$PreferencesTableTableUpdateCompanionBuilder,
+          (
+            PreferencesTableData,
+            BaseReferences<
+              _$AppDatabase,
+              $PreferencesTableTable,
+              PreferencesTableData
+            >,
+          ),
+          PreferencesTableData,
+          PrefetchHooks Function()
+        > {
+  $$PreferencesTableTableTableManager(
+    _$AppDatabase db,
+    $PreferencesTableTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$PreferencesTableTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$PreferencesTableTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$PreferencesTableTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> key = const Value.absent(),
+                Value<String> value = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => PreferencesTableCompanion(
+                key: key,
+                value: value,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String key,
+                required String value,
+                Value<int> rowid = const Value.absent(),
+              }) => PreferencesTableCompanion.insert(
+                key: key,
+                value: value,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$PreferencesTableTable, PreferencesTableData>(
+                    table,
+                  ),
+                  BaseReferences<
+                    _$AppDatabase,
+                    $PreferencesTableTable,
+                    PreferencesTableData
+                  >(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$PreferencesTableTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $PreferencesTableTable,
+      PreferencesTableData,
+      $$PreferencesTableTableFilterComposer,
+      $$PreferencesTableTableOrderingComposer,
+      $$PreferencesTableTableAnnotationComposer,
+      $$PreferencesTableTableCreateCompanionBuilder,
+      $$PreferencesTableTableUpdateCompanionBuilder,
+      (
+        PreferencesTableData,
+        BaseReferences<
+          _$AppDatabase,
+          $PreferencesTableTable,
+          PreferencesTableData
+        >,
+      ),
+      PreferencesTableData,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -2350,4 +2507,6 @@ class $AppDatabaseManager {
       $$MediaItemsTableTableTableManager(_db, _db.mediaItemsTable);
   $$AlbumsTableTableTableManager get albumsTable =>
       $$AlbumsTableTableTableManager(_db, _db.albumsTable);
+  $$PreferencesTableTableTableManager get preferencesTable =>
+      $$PreferencesTableTableTableManager(_db, _db.preferencesTable);
 }
