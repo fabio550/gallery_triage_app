@@ -3,7 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:gallery_triage_app/core/application/providers/albums_provider.dart';
 import 'package:gallery_triage_app/core/application/providers/last_used_album_provider.dart';
+import 'package:gallery_triage_app/core/application/providers/sort_order_provider.dart';
 import 'package:gallery_triage_app/core/domain/entities/album_entity.dart';
+import 'package:gallery_triage_app/core/domain/enums/sort_order.dart';
 import 'package:gallery_triage_app/core/domain/models/category_summary.dart';
 import 'package:gallery_triage_app/core/presentation/widgets/progress_bar.dart';
 import 'package:gallery_triage_app/features/triage/application/triage_session_notifier.dart';
@@ -182,6 +184,7 @@ class _TriagePageState extends ConsumerState<TriagePage> {
     final albums = ref.watch(albumsProvider);
     final lastUsedAlbumLabel =
         lastUsedAlbumId == null ? null : _albumName(albums, lastUsedAlbumId);
+    final sortOrder = ref.watch(sortOrderProvider);
 
     if (session.isLoading) {
       return Scaffold(
@@ -321,6 +324,19 @@ class _TriagePageState extends ConsumerState<TriagePage> {
             ],
           ),
           actions: [
+            // 6.2.3 — alterna a ordenação cronológica; preferência
+            // global (2.6.2), atravessa categorias e sessões.
+            IconButton(
+              tooltip: sortOrder == SortOrder.newestFirst
+                  ? 'Mais recente primeiro'
+                  : 'Mais antigo primeiro',
+              icon: Icon(
+                sortOrder == SortOrder.newestFirst
+                    ? Icons.arrow_downward
+                    : Icons.arrow_upward,
+              ),
+              onPressed: () => ref.read(sortOrderProvider.notifier).toggle(),
+            ),
             // 6.2.1 — badge com a contagem da fila na categoria ativa.
             // Oculto com a fila vazia (7 — "Tela de Revisão
             // inacessível").

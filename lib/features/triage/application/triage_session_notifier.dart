@@ -4,12 +4,16 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gallery_triage_app/core/application/providers/last_used_album_provider.dart';
 import 'package:gallery_triage_app/core/application/providers/media_repository_provider.dart';
+import 'package:gallery_triage_app/core/application/providers/preferences_repository_provider.dart';
+import 'package:gallery_triage_app/core/application/providers/sort_order_provider.dart';
 import 'package:gallery_triage_app/core/application/providers/triage_repository_provider.dart';
 import 'package:gallery_triage_app/core/domain/entities/media_item_entity.dart';
 import 'package:gallery_triage_app/core/domain/enums/deletion_mode.dart';
+import 'package:gallery_triage_app/core/domain/enums/sort_order.dart';
 import 'package:gallery_triage_app/core/domain/enums/triage_decision.dart';
 import 'package:gallery_triage_app/core/domain/models/category_summary.dart';
 import 'package:gallery_triage_app/core/domain/repositories/media_repository.dart';
+import 'package:gallery_triage_app/core/domain/repositories/preferences_repository.dart';
 import 'package:gallery_triage_app/core/domain/repositories/triage_repository.dart';
 import 'package:gallery_triage_app/features/triage/application/deletion_outcome.dart';
 import 'package:gallery_triage_app/features/triage/application/deletion_summary.dart';
@@ -37,11 +41,20 @@ class TriageSessionNotifier extends Notifier<TriageSessionState> {
 
   late final TriageRepository _repository;
   late final MediaRepository _mediaRepository;
+  late final PreferencesRepository _preferencesRepository;
 
   @override
   TriageSessionState build() {
     _repository = ref.read(triageRepositoryProvider);
     _mediaRepository = ref.read(mediaRepositoryProvider);
+    _preferencesRepository = ref.read(preferencesRepositoryProvider);
+
+    // 6.2.3 — reordena ao vivo quando a preferência global muda (ícone
+    // na AppBar da Triagem), sem precisar sair e voltar pra categoria.
+    ref.listen(sortOrderProvider, (previous, next) {
+      if (previous != null && previous != next) _applySortOrder(next);
+    });
+
     _load();
     return const TriageSessionState(
       items: [],
@@ -55,11 +68,19 @@ class TriageSessionNotifier extends Notifier<TriageSessionState> {
   /// responder. Índice já vem populado pelo `SyncService` (5.2/5.3)
   /// antes de qualquer categoria ser aberta — sem seed mockado.
   Future<void> _load() async {
-    final items = await _repository.itemsForCategory(_categoryRef);
+    final sortOrder = ref.read(sortOrderProvider);
+    final items = await _repository.itemsForCategory(
+      _categoryRef,
+      sortOrder: sortOrder,
+    );
     if (!ref.mounted) return;
+
+    final initialIndex = await _resolveInitialIndex(items);
+    if (!ref.mounted) return;
+
     state = state.copyWith(
       items: items,
-      currentIndex: _resolveInitialIndex(items),
+      currentIndex: initialIndex,
       isLoading: false,
     );
   }
@@ -75,15 +96,59 @@ class TriageSessionNotifier extends Notifier<TriageSessionState> {
     );
   }
 
-  /// 6.2.4, parcial: primeiro item não decidido; sem nenhum, primeiro
-  /// item. A parte "última posição da sessão anterior" depende de
-  /// persistência (Drift) e fica para quando o índice real existir —
-  /// não há onde gravar isso ainda.
-  static int _resolveInitialIndex(List<MediaItemEntity> items) {
+  /// 6.2.4 — última posição da sessão anterior naquela categoria,
+  /// persistida por ID do item. Se o item não existir mais nesta lista,
+  /// ou não houver posição salva: primeiro item não decidido; sem
+  /// nenhum, primeiro item.
+  Future<int> _resolveInitialIndex(List<MediaItemEntity> items) async {
     if (items.isEmpty) return 0;
+
+    final savedId = await _preferencesRepository.cursorPosition(_categoryRef);
+    if (savedId != null) {
+      final savedIndex = items.indexWhere((i) => i.id == savedId);
+      if (savedIndex != -1) return savedIndex;
+    }
+
     final firstUndecided =
         items.indexWhere((i) => i.decision == TriageDecision.undecided);
     return firstUndecided == -1 ? 0 : firstUndecided;
+  }
+
+  /// 6.2.4 — grava a posição atual pra sobreviver ao fechamento da
+  /// categoria/app. Sem item atual (fila esgotada, §7), nada a gravar —
+  /// a última posição válida continua servindo de referência.
+  void _persistCursor() {
+    final item = state.currentItem;
+    if (item == null) return;
+    unawaited(
+      _preferencesRepository
+          .setCursorPosition(_categoryRef, item.id)
+          .catchError((Object e, StackTrace st) {
+        debugPrint('PreferencesRepository.setCursorPosition falhou: $e');
+      }),
+    );
+  }
+
+  /// 6.2.3 — reordena a sessão já carregada quando a preferência global
+  /// muda, sem recarregar do Drift. Mantém o cursor no mesmo item, não
+  /// na mesma posição numérica.
+  void _applySortOrder(SortOrder order) {
+    final currentItemId = state.currentItem?.id;
+    final items = [...state.items]
+      ..sort(
+        order == SortOrder.newestFirst
+            ? (a, b) => b.dateTaken.compareTo(a.dateTaken)
+            : (a, b) => a.dateTaken.compareTo(b.dateTaken),
+      );
+
+    final newIndex = currentItemId == null
+        ? state.currentIndex
+        : items.indexWhere((i) => i.id == currentItemId);
+
+    state = state.copyWith(
+      items: items,
+      currentIndex: newIndex == -1 ? state.currentIndex : newIndex,
+    );
   }
 
   // --- Decisões (3.4) ------------------------------------------------
@@ -156,6 +221,7 @@ class TriageSessionNotifier extends Notifier<TriageSessionState> {
   void jumpTo(int index) {
     if (index < 0 || index >= state.items.length) return;
     state = state.copyWith(currentIndex: index);
+    _persistCursor();
   }
 
   /// Ação explícita da tela de fim de fila (§7) para reabrir uma
@@ -166,6 +232,7 @@ class TriageSessionNotifier extends Notifier<TriageSessionState> {
   void restartFromBeginning() {
     if (state.items.isEmpty) return;
     state = state.copyWith(currentIndex: 0);
+    _persistCursor();
   }
 
   // --- Desfazer (6.2.14 / 6.2.15, revisado) ---------------------------
@@ -209,6 +276,7 @@ class TriageSessionNotifier extends Notifier<TriageSessionState> {
       undoStack: remaining,
     );
     _persist(restored);
+    _persistCursor();
   }
 
   /// 6.2.14 — "a pilha é zerada ao sair da categoria". Chamado no
@@ -414,5 +482,6 @@ class TriageSessionNotifier extends Notifier<TriageSessionState> {
       currentIndex:
           state.hasNext ? state.currentIndex + 1 : state.items.length,
     );
+    _persistCursor();
   }
 }

@@ -1,6 +1,7 @@
 import '../entities/album_entity.dart';
 import '../entities/media_item_entity.dart';
 import '../enums/category_granularity.dart';
+import '../enums/sort_order.dart';
 import '../models/category_summary.dart';
 
 /// Leitura e escrita de decisão, álbum e fila de exclusão (2.4.2), mais
@@ -8,9 +9,14 @@ import '../models/category_summary.dart';
 /// `SyncService` (5.2/5.3). Implementação concreta (Drift) vive na
 /// camada `data`.
 abstract class TriageRepository {
-  /// Itens contáveis (6.1.10) do recorte. Sem paginação ainda — o
-  /// volume real (8.1) ainda não exigiu (8.4).
-  Future<List<MediaItemEntity>> itemsForCategory(CategoryRef ref);
+  /// Itens contáveis (6.1.10) do recorte, ordenados por `dateTaken`
+  /// conforme [sortOrder] (6.2.3 — sempre cronológica, nunca por outro
+  /// critério). Sem paginação ainda — o volume real (8.1) ainda não
+  /// exigiu (8.4).
+  Future<List<MediaItemEntity>> itemsForCategory(
+    CategoryRef ref, {
+    required SortOrder sortOrder,
+  });
 
   /// Recortes da granularidade selecionada (6.1.3), já com os totais
   /// agregados (`COUNT`/soma, 8.3) — usado pelo Dashboard. Uma
@@ -70,11 +76,8 @@ abstract class TriageRepository {
   /// caracteres proibidos) antes de inserir.
   Future<AlbumEntity> createAlbum(String name);
 
-  /// Remove as linhas de verdade, nos dois modos (lixeira ou
-  /// definitivo). Reproduz a simplificação já documentada em
-  /// `confirmDeletion` do notifier (sem simular retenção de 30 dias) —
-  /// diverge do modelo final de 3.6, onde o modo lixeira deveria só
-  /// marcar `trashedInSystem`, não apagar a linha. Revisitar quando o
-  /// MethodChannel real existir.
+  /// Remove as linhas de verdade — só o modo definitivo chama isto
+  /// (4.4.4); o modo lixeira usa [markTrashedInSystem], que preserva a
+  /// linha (3.6.1).
   Future<void> deleteItems(List<String> ids);
 }

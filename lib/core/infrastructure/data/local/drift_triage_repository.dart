@@ -3,6 +3,7 @@ import 'package:drift/drift.dart';
 import 'package:gallery_triage_app/core/domain/entities/album_entity.dart';
 import 'package:gallery_triage_app/core/domain/entities/media_item_entity.dart';
 import 'package:gallery_triage_app/core/domain/enums/category_granularity.dart';
+import 'package:gallery_triage_app/core/domain/enums/sort_order.dart';
 import 'package:gallery_triage_app/core/domain/enums/triage_decision.dart';
 import 'package:gallery_triage_app/core/domain/exceptions/album_name_exception.dart';
 import 'package:gallery_triage_app/core/domain/models/category_summary.dart';
@@ -32,12 +33,24 @@ class DriftTriageRepository implements TriageRepository {
   ];
 
   @override
-  Future<List<MediaItemEntity>> itemsForCategory(CategoryRef ref) async {
+  Future<List<MediaItemEntity>> itemsForCategory(
+    CategoryRef ref, {
+    required SortOrder sortOrder,
+  }) async {
     final query = _db.select(_db.mediaItemsTable)
       ..where(
         (t) => t.trashedInSystem.equals(false) & t.isAvailable.equals(true),
       )
-      ..where(_categoryPredicate(ref));
+      ..where(_categoryPredicate(ref))
+      // 6.2.3 — sempre cronológica, direto pelo índice de dateTaken.
+      ..orderBy([
+        (t) => OrderingTerm(
+              expression: t.dateTaken,
+              mode: sortOrder == SortOrder.newestFirst
+                  ? OrderingMode.desc
+                  : OrderingMode.asc,
+            ),
+      ]);
     final rows = await query.get();
     return rows.map(_toEntity).toList();
   }
