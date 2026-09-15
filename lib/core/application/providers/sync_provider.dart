@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gallery_triage_app/core/application/providers/preferences_repository_provider.dart';
 import 'package:gallery_triage_app/core/application/providers/sync_service_provider.dart';
+import 'package:gallery_triage_app/core/application/providers/triage_repository_provider.dart';
 import 'package:gallery_triage_app/core/application/services/sync_status.dart';
 
 final syncProvider = NotifierProvider<SyncNotifier, SyncStatus>(
@@ -16,6 +17,7 @@ final syncProvider = NotifierProvider<SyncNotifier, SyncStatus>(
 class SyncNotifier extends Notifier<SyncStatus> {
   late final _service = ref.read(syncServiceProvider);
   late final _prefs = ref.read(preferencesRepositoryProvider);
+  late final _triage = ref.read(triageRepositoryProvider);
 
   @override
   SyncStatus build() {
@@ -24,6 +26,13 @@ class SyncNotifier extends Notifier<SyncStatus> {
   }
 
   Future<void> _start() async {
+    // 5.4 — limpeza de inicialização: restaura qualquer item que
+    // ficou na fila de exclusão de uma sessão anterior (3.5.4, o app
+    // pode ter sido encerrado sem passar pelo diálogo de saída).
+    // Roda antes de qualquer coisa, "antes do dashboard abrir" (5.4.2).
+    await _triage.restorePendingQueueItems();
+    if (!ref.mounted) return;
+
     // 5.3.6/2.6 — nunca sincronizou ainda é o sinal de "primeiro scan
     // necessário", não "tabela vazia": um dispositivo com galeria
     // vazia mas já sincronizado não deve reabrir a tela de progresso

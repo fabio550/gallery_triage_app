@@ -178,6 +178,25 @@ class DriftTriageRepository implements TriageRepository {
   }
 
   @override
+  Future<void> restorePendingQueueItems() async {
+    final rows = await (_db.select(_db.mediaItemsTable)
+          ..where(
+            (t) =>
+                t.decision.equals(TriageDecision.markedForDeletion.name) &
+                t.trashedInSystem.equals(false),
+          ))
+        .get();
+    if (rows.isEmpty) return;
+
+    final restored = rows
+        .map((row) => _toCompanion(_toEntity(row).restoreFromQueue()))
+        .toList();
+    await _db.batch((batch) {
+      batch.replaceAll(_db.mediaItemsTable, restored);
+    });
+  }
+
+  @override
   Future<List<AlbumEntity>> albums() async {
     final rows = await _db.select(_db.albumsTable).get();
     return rows

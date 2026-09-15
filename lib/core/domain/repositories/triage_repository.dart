@@ -70,6 +70,14 @@ abstract class TriageRepository {
   /// decisão e álbum — não é tratado como item novo.
   Future<void> restoreFromSystemTrash(Set<int> mediaStoreIds);
 
+  /// 5.4.1 — restaura todo item com `decision naLixeira` e
+  /// `trashedInSystem` false a partir de `preQueueDecision`/
+  /// `preQueueAlbumId`. Chamado na inicialização, antes do Dashboard
+  /// abrir (5.4.2) — garante o invariante de 3.5.2 ("a fila não
+  /// sobrevive à saída da categoria") mesmo quando o app foi encerrado
+  /// pelo Android sem passar pelo diálogo de saída (3.5.3/3.5.4).
+  Future<void> restorePendingQueueItems();
+
   Future<List<AlbumEntity>> albums();
 
   /// Valida 6.5.3 (nome único case-insensitive, ≤64 caracteres,
