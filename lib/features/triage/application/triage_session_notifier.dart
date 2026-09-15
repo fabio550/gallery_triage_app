@@ -283,7 +283,7 @@ class TriageSessionNotifier extends Notifier<TriageSessionState> {
   }
 
   /// Dispara o diálogo do sistema de verdade (4.3.1/4.3.2 — um único
-  /// diálogo pro lote inteiro) via [MediaRepository], e só then atualiza
+  /// diálogo pro lote inteiro) via [MediaRepository], e só então atualiza
   /// índice e sessão com base na lista efetivamente processada, nunca
   /// na enviada (4.3.5 — regra crítica). `RESULT_CANCELED` (lista vazia
   /// de volta) não toca em nada (4.3.6). Aplicação parcial (§7) remove
