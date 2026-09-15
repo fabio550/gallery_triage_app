@@ -3,12 +3,15 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gallery_triage_app/core/application/providers/last_used_album_provider.dart';
+import 'package:gallery_triage_app/core/application/providers/media_repository_provider.dart';
 import 'package:gallery_triage_app/core/application/providers/triage_repository_provider.dart';
 import 'package:gallery_triage_app/core/domain/entities/media_item_entity.dart';
 import 'package:gallery_triage_app/core/domain/enums/deletion_mode.dart';
 import 'package:gallery_triage_app/core/domain/enums/triage_decision.dart';
 import 'package:gallery_triage_app/core/domain/models/category_summary.dart';
+import 'package:gallery_triage_app/core/domain/repositories/media_repository.dart';
 import 'package:gallery_triage_app/core/domain/repositories/triage_repository.dart';
+import 'package:gallery_triage_app/features/triage/application/deletion_outcome.dart';
 import 'package:gallery_triage_app/features/triage/application/deletion_summary.dart';
 import 'package:gallery_triage_app/features/triage/application/triage_session_state.dart';
 import 'package:gallery_triage_app/features/triage/application/undo_entry.dart';
@@ -33,10 +36,12 @@ class TriageSessionNotifier extends Notifier<TriageSessionState> {
   static const _maxUndoEntries = 40;
 
   late final TriageRepository _repository;
+  late final MediaRepository _mediaRepository;
 
   @override
   TriageSessionState build() {
     _repository = ref.read(triageRepositoryProvider);
+    _mediaRepository = ref.read(mediaRepositoryProvider);
     _load();
     return const TriageSessionState(
       items: [],
@@ -277,24 +282,50 @@ class TriageSessionNotifier extends Notifier<TriageSessionState> {
     changed.forEach(_persist);
   }
 
-  /// Simula `RESULT_OK` do diálogo do sistema (4.3.4) — sem
-  /// `MethodChannel` real ainda (2.1.5), não há como esperar a resposta
-  /// de `createTrashRequest`/`createDeleteRequest` de verdade.
+  /// Dispara o diálogo do sistema de verdade (4.3.1/4.3.2 — um único
+  /// diálogo pro lote inteiro) via [MediaRepository], e só then atualiza
+  /// índice e sessão com base na lista efetivamente processada, nunca
+  /// na enviada (4.3.5 — regra crítica). `RESULT_CANCELED` (lista vazia
+  /// de volta) não toca em nada (4.3.6). Aplicação parcial (§7) remove
+  /// da sessão só os itens processados; os demais permanecem na fila.
   ///
-  /// Remove os itens da sessão E apaga as linhas do índice
-  /// (`TriageRepository.deleteItems`) nos dois modos. Simplificação
-  /// documentada: o modo lixeira deveria só marcar `trashedInSystem`
-  /// (3.6.1), preservando o registro por ~30 dias — aqui apaga direto
-  /// nos dois casos, porque sem o canal nativo não há como restaurar
-  /// depois mesmo (criaria um registro "retido" que nunca purga nem
-  /// reaparece).
-  ///
-  /// `mode` só importa aqui pra compor o [DeletionSummary] (6.4.1) —
-  /// não muda o que acontece com os itens, os dois removem a linha.
-  void confirmDeletion(List<String> itemIds, DeletionMode mode) {
+  /// Modo lixeira marca `trashedInSystem` (3.6.1), preservando a linha;
+  /// modo definitivo apaga a linha (irreversível, 4.4.4).
+  Future<DeletionOutcome> confirmDeletion(
+    List<String> itemIds,
+    DeletionMode mode,
+  ) async {
     final oldItems = state.items;
-    final removed = oldItems.where((i) => itemIds.contains(i.id)).toList();
-    final newItems = oldItems.where((i) => !itemIds.contains(i.id)).toList();
+    final targets = oldItems.where((i) => itemIds.contains(i.id)).toList();
+    if (targets.isEmpty) return DeletionOutcome.cancelled;
+
+    final domainIdByMediaStoreId = {
+      for (final t in targets) t.mediaStoreId: t.id,
+    };
+    final mediaStoreIds = targets.map((t) => t.mediaStoreId).toList();
+
+    List<int> processedMediaStoreIds;
+    try {
+      processedMediaStoreIds = mode == DeletionMode.trash
+          ? await _mediaRepository.moveToSystemTrash(mediaStoreIds)
+          : await _mediaRepository.deletePermanently(mediaStoreIds);
+    } catch (e, st) {
+      debugPrint('MediaRepository exclusão/lixeira falhou: $e\n$st');
+      return DeletionOutcome.cancelled;
+    }
+
+    // 4.3.6 — RESULT_CANCELED (ou tudo falhou ao mapear pro sistema,
+    // 6.2.16-style defensivo): fila permanece intacta.
+    if (processedMediaStoreIds.isEmpty) return DeletionOutcome.cancelled;
+
+    final processedIds = processedMediaStoreIds
+        .map((id) => domainIdByMediaStoreId[id])
+        .whereType<String>()
+        .toSet();
+
+    final removed = oldItems.where((i) => processedIds.contains(i.id)).toList();
+    final newItems =
+        oldItems.where((i) => !processedIds.contains(i.id)).toList();
 
     final freedBytes = removed.fold<int>(0, (sum, i) => sum + i.sizeBytes);
     final summary = DeletionSummary(
@@ -322,11 +353,28 @@ class TriageSessionNotifier extends Notifier<TriageSessionState> {
       lastDeletionSummary: summary,
     );
 
-    unawaited(
-      _repository.deleteItems(itemIds).catchError((Object e, StackTrace st) {
-        debugPrint('TriageRepository.deleteItems falhou: $e');
-      }),
-    );
+    final processedList = processedIds.toList();
+    if (mode == DeletionMode.trash) {
+      unawaited(
+        _repository
+            .markTrashedInSystem(processedList, DateTime.now())
+            .catchError((Object e, StackTrace st) {
+          debugPrint('TriageRepository.markTrashedInSystem falhou: $e');
+        }),
+      );
+    } else {
+      unawaited(
+        _repository.deleteItems(processedList).catchError(
+          (Object e, StackTrace st) {
+            debugPrint('TriageRepository.deleteItems falhou: $e');
+          },
+        ),
+      );
+    }
+
+    return processedIds.length == itemIds.length
+        ? DeletionOutcome.completed
+        : DeletionOutcome.partial;
   }
 
   void _pushUndo(MediaItemEntity beforeAction) {

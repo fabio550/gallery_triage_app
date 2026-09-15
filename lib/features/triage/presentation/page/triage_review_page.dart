@@ -4,6 +4,7 @@ import 'package:gallery_triage_app/core/application/providers/deletion_mode_prov
 import 'package:gallery_triage_app/core/domain/entities/media_item_entity.dart';
 import 'package:gallery_triage_app/core/domain/enums/deletion_mode.dart';
 import 'package:gallery_triage_app/core/domain/models/category_summary.dart';
+import 'package:gallery_triage_app/features/triage/application/deletion_outcome.dart';
 import 'package:gallery_triage_app/features/triage/application/triage_session_notifier.dart';
 import 'package:gallery_triage_app/features/triage/presentation/widgets/queue_grid_tile.dart';
 
@@ -99,10 +100,9 @@ class _TriageReviewPageState extends ConsumerState<TriageReviewPage> {
                   : 'Excluir Selecionadas (${selected.length} · '
                       '${(selectedSize / (1024 * 1024)).toStringAsFixed(0)} MB)',
             ),
-            // TODO Etapa 7b concluída: diálogo de confirmação (6.3.5) +
-            // execução simulada (6.3.6/6.3.7, 6.4). O diálogo real do
-            // sistema (4.3) continua fora de escopo — não há
-            // MethodChannel ainda.
+            // Diálogo de confirmação do app (6.3.5), seguido do
+            // diálogo real do sistema (4.3, via MediaRepository) —
+            // sequência de 6.3.6.
             onPressed: selected.isEmpty
                 ? null
                 : () => _confirmDeletion(selected),
@@ -176,21 +176,38 @@ class _TriageReviewPageState extends ConsumerState<TriageReviewPage> {
 
     if (confirmedMode == null || !mounted) return;
 
+    // 4.4.2 — a escolha do modo em si já vale, independente do que o
+    // diálogo do sistema (a seguir) decidir.
     ref.read(deletionModeProvider.notifier).set(confirmedMode);
-    ref
-        .read(triageSessionProvider(widget.categoryRef).notifier)
-        .confirmDeletion(selected.map((i) => i.id).toList(), confirmedMode);
 
-    // 6.4.1 — texto condicionado ao modo (4.4.5). Quem exibe é o
-    // TriagePage: 6.4.5 manda voltar pra lá, então o resumo não faz
-    // sentido aparecer numa tela que já está fechando.
-    final message = confirmedMode == DeletionMode.trash
-        ? '${selected.length} itens movidos para a lixeira do sistema '
-            '(retidos por cerca de 30 dias).'
-        : '${selected.length} itens excluídos — '
-            '${(totalSize / (1024 * 1024)).toStringAsFixed(0)} MB liberados.';
+    final sessionNotifier =
+        ref.read(triageSessionProvider(widget.categoryRef).notifier);
+    final outcome = await sessionNotifier.confirmDeletion(
+      selected.map((i) => i.id).toList(),
+      confirmedMode,
+    );
 
     if (!mounted) return;
+
+    if (outcome == DeletionOutcome.cancelled) {
+      // 4.3.6 — aviso não bloqueante; fila preservada, permanece aqui.
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Nada foi excluído.')),
+      );
+      return;
+    }
+
+    // 6.4.1 — texto condicionado ao modo (4.4.5), fonte única em
+    // DeletionSummary.text; usa o resumo real (itens efetivamente
+    // processados, não os selecionados — §7, exclusão parcial). Quem
+    // exibe é o TriagePage: 6.4.5 manda voltar pra lá.
+    final summary =
+        ref.read(triageSessionProvider(widget.categoryRef)).lastDeletionSummary;
+    final message = outcome == DeletionOutcome.partial
+        ? '${summary?.text ?? ''} Alguns itens não foram processados e '
+            'permanecem na fila.'
+        : summary?.text;
+
     Navigator.of(context).pop(message);
   }
 }

@@ -34,4 +34,15 @@ abstract class MediaRepository {
   /// tamanho maior é usado pelo card principal, 6.2.8). `null` em
   /// falha de leitura — a UI cai no placeholder (§7).
   Future<Uint8List?> readThumbnail(int mediaStoreId, {required int size});
+
+  /// Dispara `MediaStore.createTrashRequest` (4.3.1) para o lote
+  /// inteiro — um único diálogo do sistema (4.3.2). Retorna só os
+  /// `mediaStoreId` efetivamente movidos pro sistema, nunca os
+  /// enviados (4.3.5); vazio se `RESULT_CANCELED` (4.3.6).
+  Future<List<int>> moveToSystemTrash(List<int> mediaStoreIds);
+
+  /// Dispara `MediaStore.createDeleteRequest` (4.3.1), mesma regra de
+  /// lote único e retorno pelo processado de fato (4.3.5/4.3.6).
+  /// Irreversível (4.4.4).
+  Future<List<int>> deletePermanently(List<int> mediaStoreIds);
 }

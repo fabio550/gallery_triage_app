@@ -81,6 +81,40 @@ class DriftTriageRepository implements TriageRepository {
   }
 
   @override
+  Future<void> markTrashedInSystem(List<String> ids, DateTime at) async {
+    if (ids.isEmpty) return;
+    await (_db.update(_db.mediaItemsTable)..where((t) => t.id.isIn(ids)))
+        .write(
+      MediaItemsTableCompanion(
+        trashedInSystem: const Value(true),
+        trashedAt: Value(at),
+      ),
+    );
+  }
+
+  @override
+  Future<Set<int>> trashedMediaStoreIds() async {
+    final query = _db.selectOnly(_db.mediaItemsTable)
+      ..addColumns([_db.mediaItemsTable.mediaStoreId])
+      ..where(_db.mediaItemsTable.trashedInSystem.equals(true));
+    final rows = await query.get();
+    return rows.map((r) => r.read(_db.mediaItemsTable.mediaStoreId)!).toSet();
+  }
+
+  @override
+  Future<void> restoreFromSystemTrash(Set<int> mediaStoreIds) async {
+    if (mediaStoreIds.isEmpty) return;
+    await (_db.update(_db.mediaItemsTable)
+          ..where((t) => t.mediaStoreId.isIn(mediaStoreIds)))
+        .write(
+      const MediaItemsTableCompanion(
+        trashedInSystem: Value(false),
+        trashedAt: Value(null),
+      ),
+    );
+  }
+
+  @override
   Future<List<CategorySummary>> categoriesFor(
     CategoryGranularity granularity,
   ) async {

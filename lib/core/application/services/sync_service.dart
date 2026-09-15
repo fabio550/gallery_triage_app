@@ -85,11 +85,22 @@ class SyncService {
     await _media.ensureReady();
 
     final existingIds = await _triage.indexedMediaStoreIds();
+    // 5.5.1 — itens retidos na lixeira do sistema somem das consultas
+    // normais do MediaStore por definição; sem isolar isso, o diff
+    // abaixo os classificaria como órfãos.
+    final trashedIds = await _triage.trashedMediaStoreIds();
     final seen = <int>{};
+    // 3.6.3/5.5.5 — retido que reaparece na varredura foi restaurado
+    // pelo usuário na lixeira do sistema, não é item novo.
+    final reappearedTrashed = <int>{};
 
     await for (final batch in _media.scanBatches(batchSize: _batchSize)) {
       for (final asset in batch) {
-        if (_inScope(asset.relativePath)) seen.add(asset.mediaStoreId);
+        if (!_inScope(asset.relativePath)) continue;
+        seen.add(asset.mediaStoreId);
+        if (trashedIds.contains(asset.mediaStoreId)) {
+          reappearedTrashed.add(asset.mediaStoreId);
+        }
       }
       final entities = await _buildNewEntities(
         batch,
@@ -100,24 +111,29 @@ class SyncService {
       }
     }
 
+    if (reappearedTrashed.isNotEmpty) {
+      await _triage.restoreFromSystemTrash(reappearedTrashed);
+    }
+
     // 5.5.6 — ausência não decorre necessariamente de exclusão de
     // verdade (pode ser acesso parcial ou volume desmontado, e sem o
-    // canal nativo de 5.5.2 não dá pra distinguir de retido na lixeira
-    // do sistema). Marca indisponível, nunca apaga o registro aqui —
-    // 5.5.4 (purga de órfão de verdade) fica pra quando esse canal
-    // existir.
-    final missing = existingIds.difference(seen);
+    // canal nativo de 5.5.2 não dá pra distinguir órfão de retido).
+    // Marca indisponível, nunca apaga o registro aqui — 5.5.4 (purga de
+    // órfão de verdade) fica pra quando esse canal existir. Exclui os
+    // já retidos (`trashedIds`): a ausência deles é esperada, não um
+    // sinal de problema.
+    final missing = existingIds.difference(seen).difference(trashedIds);
     if (missing.isNotEmpty) {
       await _triage.markUnavailable(missing);
     }
 
-    // Lacuna conhecida: um item que estava `isAvailable` false (5.5.6)
-    // e reaparece (volume remontado) é visto aqui — entra em `seen` —
-    // mas como já está em `existingIds`, `_buildNewEntities` pula ele
-    // e ninguém restaura `isAvailable` pra true. Sem impacto na
-    // detecção de itens novos/ausentes; revisitar junto da distinção
-    // órfão/retido de 5.5, que depende do mesmo canal nativo ainda não
-    // construído (2.1.5).
+    // Lacuna conhecida: um item que estava `isAvailable` false (5.5.6,
+    // não retido na lixeira) e reaparece (volume remontado) é visto
+    // aqui — entra em `seen` — mas como já está em `existingIds`,
+    // `_buildNewEntities` pula ele e ninguém restaura `isAvailable`
+    // pra true. Sem impacto na detecção de itens novos/ausentes;
+    // revisitar junto da distinção órfão/retido de 5.5, que depende do
+    // mesmo canal nativo ainda não construído (2.1.5).
     await _bumpLastSync();
   }
 

@@ -99,4 +99,33 @@ class PhotoManagerMediaRepository implements MediaRepository {
       return null;
     }
   }
+
+  @override
+  Future<List<int>> moveToSystemTrash(List<int> mediaStoreIds) async {
+    if (mediaStoreIds.isEmpty) return const [];
+    // `moveToTrash` pede `AssetEntity`, não IDs crus — diferente de
+    // `deleteWithIds` (abaixo). Itens que já sumiram do MediaStore
+    // entre a leitura da fila e o toque em Excluir viram `null` e são
+    // descartados sem quebrar o lote inteiro.
+    final assets = await Future.wait(
+      mediaStoreIds.map((id) => AssetEntity.fromId(id.toString())),
+    );
+    final valid = assets.whereType<AssetEntity>().toList();
+    if (valid.isEmpty) return const [];
+
+    final trashed = await PhotoManager.editor.moveToTrash(valid);
+    return _parseIds(trashed);
+  }
+
+  @override
+  Future<List<int>> deletePermanently(List<int> mediaStoreIds) async {
+    if (mediaStoreIds.isEmpty) return const [];
+    final deleted = await PhotoManager.editor.deleteWithIds(
+      mediaStoreIds.map((id) => id.toString()).toList(),
+    );
+    return _parseIds(deleted);
+  }
+
+  List<int> _parseIds(List<String> ids) =>
+      ids.map(int.tryParse).whereType<int>().toList();
 }

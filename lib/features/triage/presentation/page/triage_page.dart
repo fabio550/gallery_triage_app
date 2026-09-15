@@ -4,10 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gallery_triage_app/core/application/providers/albums_provider.dart';
 import 'package:gallery_triage_app/core/application/providers/last_used_album_provider.dart';
 import 'package:gallery_triage_app/core/domain/entities/album_entity.dart';
-import 'package:gallery_triage_app/core/domain/enums/deletion_mode.dart';
 import 'package:gallery_triage_app/core/domain/models/category_summary.dart';
 import 'package:gallery_triage_app/core/presentation/widgets/progress_bar.dart';
-import 'package:gallery_triage_app/features/triage/application/deletion_summary.dart';
 import 'package:gallery_triage_app/features/triage/application/triage_session_notifier.dart';
 import 'package:gallery_triage_app/features/triage/presentation/page/triage_review_page.dart';
 import 'package:gallery_triage_app/features/triage/presentation/widgets/album_panel.dart';
@@ -16,17 +14,6 @@ import 'package:gallery_triage_app/features/triage/presentation/widgets/media_in
 import 'package:gallery_triage_app/features/triage/presentation/widgets/triage_action_bar.dart';
 import 'package:gallery_triage_app/features/triage/presentation/widgets/triage_card.dart';
 import 'package:gallery_triage_app/features/triage/presentation/widgets/triage_carousel.dart';
-
-/// 4.4.5 — texto condicionado ao modo: lixeira menciona a retenção,
-/// definitivo informa o espaço liberado. Nunca anuncia espaço liberado
-/// que não aconteceu (modo lixeira não libera nada de fato ainda).
-String _deletionSummaryText(DeletionSummary summary) {
-  final mb = (summary.freedBytes / (1024 * 1024)).toStringAsFixed(0);
-  return summary.mode == DeletionMode.trash
-      ? '${summary.count} itens movidos para a lixeira do sistema '
-          '(retidos por cerca de 30 dias).'
-      : '${summary.count} itens excluídos — $mb MB liberados.';
-}
 
 /// Nome do álbum de `lastUsedAlbumId` (6.2.18) — `null` se a lista
 /// ainda não carregou ou o álbum não existe mais (2.6.3 cobre a
@@ -258,7 +245,7 @@ class _TriagePageState extends ConsumerState<TriagePage> {
                         if (session.lastDeletionSummary != null) ...[
                           const SizedBox(height: 8),
                           Text(
-                            _deletionSummaryText(session.lastDeletionSummary!),
+                            session.lastDeletionSummary!.text,
                             style: text.bodyMedium?.copyWith(
                               color: Theme.of(context)
                                   .colorScheme

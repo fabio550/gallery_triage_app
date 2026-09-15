@@ -46,6 +46,24 @@ abstract class TriageRepository {
   /// false em vez de excluir — reversível se o item reaparecer.
   Future<void> markUnavailable(Set<int> mediaStoreIds);
 
+  /// 3.6.1 — confirmação de `createTrashRequest` com `RESULT_OK`.
+  /// Mantém `decision`, `albumId` e demais campos intactos; só marca
+  /// `trashedInSystem` true e grava `trashedAt`. Não apaga a linha —
+  /// diferente do modo definitivo (`deleteItems`).
+  Future<void> markTrashedInSystem(List<String> ids, DateTime at);
+
+  /// `mediaStoreId` de todo item com `trashedInSystem` true — usado
+  /// pelo `SyncService` (5.5.1) para não confundir ausência esperada
+  /// (item retido, some das consultas normais por definição) com
+  /// ausência real (órfão/excluído por fora do app).
+  Future<Set<int>> trashedMediaStoreIds();
+
+  /// 3.6.3/5.5.5 — item retido que reaparece na consulta normal do
+  /// MediaStore foi restaurado pelo usuário na lixeira do sistema.
+  /// Marca `trashedInSystem` false e limpa `trashedAt`, preservando
+  /// decisão e álbum — não é tratado como item novo.
+  Future<void> restoreFromSystemTrash(Set<int> mediaStoreIds);
+
   Future<List<AlbumEntity>> albums();
 
   /// Valida 6.5.3 (nome único case-insensitive, ≤64 caracteres,
