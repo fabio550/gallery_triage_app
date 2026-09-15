@@ -84,6 +84,18 @@ abstract class TriageRepository {
   /// caracteres proibidos) antes de inserir.
   Future<AlbumEntity> createAlbum(String name);
 
+  /// 6.5.4 — renomeia, sem afetar os vínculos existentes. Mesmas
+  /// regras de nome de [createAlbum] (6.5.3), excluindo o próprio
+  /// álbum da checagem de duplicidade.
+  Future<AlbumEntity> renameAlbum(String albumId, String newName);
+
+  /// 6.5.5/6.5.6 — exclui o álbum. Os itens vinculados passam a
+  /// `albumId` null, preservando `decision` (mantido não muda) — não
+  /// mexe em arquivo nenhum. A contagem de itens afetados (pro diálogo
+  /// de confirmação) vem de [albumItemCounts], lida antes de chamar
+  /// isto.
+  Future<void> deleteAlbum(String albumId);
+
   /// Remove as linhas de verdade — só o modo definitivo chama isto
   /// (4.4.4); o modo lixeira usa [markTrashedInSystem], que preserva a
   /// linha (3.6.1).

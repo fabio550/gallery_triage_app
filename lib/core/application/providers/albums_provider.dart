@@ -1,6 +1,9 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:gallery_triage_app/core/application/providers/categories_provider.dart';
+import 'package:gallery_triage_app/core/application/providers/last_used_album_provider.dart';
 import 'package:gallery_triage_app/core/application/providers/triage_repository_provider.dart';
 import 'package:gallery_triage_app/core/domain/entities/album_entity.dart';
+import 'package:gallery_triage_app/core/domain/enums/category_granularity.dart';
 
 final albumsProvider = NotifierProvider<AlbumsNotifier, List<AlbumEntity>>(
   AlbumsNotifier.new,
@@ -32,12 +35,42 @@ class AlbumsNotifier extends Notifier<List<AlbumEntity>> {
   Future<String> create(String rawName) async {
     final album = await _repository.createAlbum(rawName);
     state = [...state, album];
+    _invalidateDashboard();
     return album.id;
   }
 
+  /// 6.5.4 — renomeia, sem afetar os vínculos existentes.
+  Future<AlbumEntity> rename(String albumId, String rawName) async {
+    final renamed = await _repository.renameAlbum(albumId, rawName);
+    state = [
+      for (final a in state) a.id == albumId ? renamed : a,
+    ];
+    _invalidateDashboard();
+    return renamed;
+  }
+
+  /// 6.5.5/6.5.6 — exclui o álbum e desclassifica os itens vinculados
+  /// (repositório cuida disso). Limpa `lastUsedAlbumId` se era este o
+  /// álbum armado (2.6.3), senão o atalho de swipe pra cima (6.2.18)
+  /// ficaria apontando pra um álbum que não existe mais.
+  Future<void> delete(String albumId) async {
+    await _repository.deleteAlbum(albumId);
+    state = state.where((a) => a.id != albumId).toList();
+    ref.read(lastUsedAlbumProvider.notifier).clearIfMatches(albumId);
+    _invalidateDashboard();
+  }
+
   /// Reavalia a lista — usado depois de qualquer escrita feita por
-  /// fora deste notifier (nenhuma ainda, mas mantém o estado
-  /// reconciliável se um dia existir gestão de álbuns fora daqui,
-  /// 6.5.2/P-08).
+  /// fora deste notifier.
   Future<void> refresh() => _load();
+
+  /// Criar/renomear/excluir álbum muda tanto a categoria "Álbuns" quanto
+  /// a contagem "Todos os itens" (um item pode trocar de álbum) e as
+  /// contagens usadas pelo painel de gestão — sem isso, o Dashboard
+  /// mostraria dado velho ao voltar da tela de álbuns.
+  void _invalidateDashboard() {
+    ref.invalidate(categoriesProvider(CategoryGranularity.album));
+    ref.invalidate(categoriesProvider(CategoryGranularity.all));
+    ref.invalidate(albumItemCountsProvider);
+  }
 }

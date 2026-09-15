@@ -26,7 +26,17 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
     final categoriesAsync = ref.watch(categoriesProvider(_granularity));
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Triagem')),
+      appBar: AppBar(
+        title: const Text('Triagem'),
+        actions: [
+          // 6.5.2/P-08 — ponto de entrada da tela de gestão de álbuns.
+          IconButton(
+            tooltip: 'Álbuns',
+            icon: const Icon(Icons.photo_album_outlined),
+            onPressed: () => context.push('/albums'),
+          ),
+        ],
+      ),
       body: Column(
         children: [
           Padding(

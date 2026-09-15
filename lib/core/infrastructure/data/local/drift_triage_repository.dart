@@ -208,6 +208,68 @@ class DriftTriageRepository implements TriageRepository {
 
   @override
   Future<AlbumEntity> createAlbum(String rawName) async {
+    final existing = await albums();
+    final name = _validateAlbumName(rawName, existing);
+
+    final album = AlbumEntity(
+      id: 'album-${DateTime.now().microsecondsSinceEpoch}',
+      name: name,
+      createdAt: DateTime.now(),
+    );
+    await _db.into(_db.albumsTable).insert(
+          AlbumsTableCompanion.insert(
+            id: album.id,
+            name: album.name,
+            createdAt: album.createdAt,
+          ),
+        );
+    return album;
+  }
+
+  @override
+  Future<AlbumEntity> renameAlbum(String albumId, String rawName) async {
+    final existing = await albums();
+    AlbumEntity? current;
+    for (final a in existing) {
+      if (a.id == albumId) {
+        current = a;
+        break;
+      }
+    }
+    if (current == null) {
+      throw const AlbumNameException('Álbum não encontrado.');
+    }
+    final name = _validateAlbumName(rawName, existing, excludingId: albumId);
+
+    await (_db.update(_db.albumsTable)..where((t) => t.id.equals(albumId)))
+        .write(AlbumsTableCompanion(name: Value(name)));
+
+    return AlbumEntity(id: albumId, name: name, createdAt: current.createdAt);
+  }
+
+  @override
+  Future<void> deleteAlbum(String albumId) async {
+    // 6.5.6 — desclassifica os itens vinculados (albumId null),
+    // preservando `decision` — "mantido" não muda, nenhum arquivo é
+    // tocado. Roda antes de apagar a linha do álbum em si.
+    await (_db.update(_db.mediaItemsTable)
+          ..where((t) => t.albumId.equals(albumId)))
+        .write(const MediaItemsTableCompanion(albumId: Value(null)));
+
+    await (_db.delete(_db.albumsTable)..where((t) => t.id.equals(albumId)))
+        .go();
+  }
+
+  /// 6.5.3 — nome único (case-insensitive), sem espaços nas pontas,
+  /// ≤64 caracteres, sem os separadores de caminho (`/ \ : * ? " < > |`
+  /// — antecipa o estágio 2, onde o nome vira pasta real). Compartilhado
+  /// entre [createAlbum] e [renameAlbum]; [excludingId] deixa o próprio
+  /// álbum fora da checagem de duplicidade ao renomear.
+  String _validateAlbumName(
+    String rawName,
+    List<AlbumEntity> existing, {
+    String? excludingId,
+  }) {
     final name = rawName.trim();
 
     if (name.isEmpty) {
@@ -224,26 +286,14 @@ class DriftTriageRepository implements TriageRepository {
 
     // Unicidade case-insensitive (6.5.3) checada em código, não via
     // collation do Drift — mesma decisão documentada no schema.
-    final existing = await albums();
-    final duplicate =
-        existing.any((a) => a.name.toLowerCase() == name.toLowerCase());
+    final duplicate = existing.any(
+      (a) => a.id != excludingId && a.name.toLowerCase() == name.toLowerCase(),
+    );
     if (duplicate) {
       throw const AlbumNameException('Já existe um álbum com esse nome.');
     }
 
-    final album = AlbumEntity(
-      id: 'album-${DateTime.now().microsecondsSinceEpoch}',
-      name: name,
-      createdAt: DateTime.now(),
-    );
-    await _db.into(_db.albumsTable).insert(
-          AlbumsTableCompanion.insert(
-            id: album.id,
-            name: album.name,
-            createdAt: album.createdAt,
-          ),
-        );
-    return album;
+    return name;
   }
 
   @override
