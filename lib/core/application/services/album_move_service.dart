@@ -6,15 +6,16 @@ import 'package:gallery_triage_app/core/domain/repositories/triage_repository.da
 /// 6.5.7 — "álbum como pasta real". Confirmação em lote, no mesmo
 /// padrão já usado pela exclusão (4.3): o swipe/painel de álbuns só
 /// grava local e marca `albumMovePending` (instantâneo); o movimento
-/// físico de verdade — que pede confirmação do sistema
-/// (`createWriteRequest`, via [MediaRepository.moveAssetsToRelativePath])
-/// — só roda quando isto é chamado, tipicamente ao sair de uma sessão
-/// de triagem.
+/// físico de verdade — que pede confirmação do sistema — só roda
+/// quando isto é chamado, tipicamente ao sair de uma sessão de
+/// triagem.
 ///
 /// O lote pendente é global (qualquer categoria), não escopado por
 /// sessão — diferente da fila de exclusão (3.5.1), porque classificar
 /// num álbum pode acontecer em qualquer categoria e o item físico só
-/// tem uma pasta de verdade.
+/// tem uma pasta de verdade. [MediaRepository.moveAssetsToPaths] pede
+/// a concessão do sistema pro lote inteiro de uma vez só — um único
+/// diálogo, mesmo que os itens tenham destinos (álbuns) diferentes.
 class AlbumMoveService {
   AlbumMoveService({
     required MediaRepository mediaRepository,
@@ -34,11 +35,11 @@ class AlbumMoveService {
     return pending.length;
   }
 
-  /// Agrupa por destino (pasta do álbum atual, ou [MediaItemEntity
-  /// .preAlbumRelativePath] pra quem foi desclassificado/teve o álbum
-  /// excluído) e confirma um lote por grupo — um diálogo do sistema por
-  /// destino distinto, não um por item. Na sessão comum (um álbum por
-  /// vez) isso já é um único diálogo.
+  /// Resolve o destino de cada item pendente (pasta do álbum atual, ou
+  /// [MediaItemEntity.preAlbumRelativePath] pra quem foi
+  /// desclassificado/teve o álbum excluído) e confirma tudo numa
+  /// chamada só — um diálogo do sistema pro lote inteiro, não um por
+  /// destino.
   Future<AlbumMoveResult> confirmPendingMoves() async {
     final pending = await _triage.itemsPendingAlbumMove();
     if (pending.isEmpty) {
@@ -48,7 +49,8 @@ class AlbumMoveService {
     final albums = await _triage.albums();
     final albumNameById = {for (final a in albums) a.id: a.name};
 
-    final groups = <String, List<MediaItemEntity>>{};
+    final targetByMediaStoreId = <int, String>{};
+    final itemByMediaStoreId = <int, MediaItemEntity>{};
     for (final item in pending) {
       final target = item.albumId != null
           ? '$_albumsRoot/${albumNameById[item.albumId] ?? item.albumId}'
@@ -57,23 +59,22 @@ class AlbumMoveService {
       // não deveria existir (assignToAlbum sempre grava a origem antes
       // de marcar pendente), mas sem alvo não há o que mover.
       if (target == null) continue;
-      groups.putIfAbsent(target, () => []).add(item);
+      targetByMediaStoreId[item.mediaStoreId] = target;
+      itemByMediaStoreId[item.mediaStoreId] = item;
     }
 
-    final succeeded = <MediaItemEntity>[];
-    var failedCount = 0;
+    if (targetByMediaStoreId.isEmpty) {
+      return const AlbumMoveResult(movedCount: 0, failedCount: 0);
+    }
 
-    for (final entry in groups.entries) {
-      final targetPath = entry.key;
-      final items = entry.value;
-      final ok = await _media.moveAssetsToRelativePath(
-        items.map((i) => i.mediaStoreId).toList(),
-        targetPath,
-      );
-      if (ok) {
-        succeeded.addAll(items.map((i) => i.applyAlbumMove(targetPath)));
-      } else {
-        failedCount += items.length;
+    final movedIds = await _media.moveAssetsToPaths(targetByMediaStoreId);
+
+    final succeeded = <MediaItemEntity>[];
+    for (final id in movedIds) {
+      final item = itemByMediaStoreId[id];
+      final target = targetByMediaStoreId[id];
+      if (item != null && target != null) {
+        succeeded.add(item.applyAlbumMove(target));
       }
     }
 
@@ -83,7 +84,7 @@ class AlbumMoveService {
 
     return AlbumMoveResult(
       movedCount: succeeded.length,
-      failedCount: failedCount,
+      failedCount: targetByMediaStoreId.length - succeeded.length,
     );
   }
 }

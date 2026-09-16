@@ -9,10 +9,11 @@ import 'package:photo_manager/photo_manager.dart';
 /// Implementação Android via `photo_manager` (2.1.4). O app não tem
 /// suporte a iOS (1.2) — sem ramo de plataforma aqui.
 class PhotoManagerMediaRepository implements MediaRepository {
-  // 2.1.5 — o que `photo_manager` não expõe (itens na lixeira do
-  // sistema, inclusive os retidos por fora deste app) sai pelo canal
-  // nativo próprio, registrado em `MainActivity.kt`.
-  static const _trashChannel = MethodChannel('gallery_triage_app/media_trash');
+  // 2.1.5/6.5.7 — o que `photo_manager` não expõe, ou expõe de um
+  // jeito que não serve (um diálogo por destino em vez de um só pro
+  // lote inteiro), sai pelo canal nativo próprio, registrado em
+  // `MainActivity.kt`.
+  static const _nativeChannel = MethodChannel('gallery_triage_app/media_native');
   @override
   Future<void> ensureReady() async {
     // Handshake com o plugin — a permissão real já foi concedida via
@@ -137,7 +138,7 @@ class PhotoManagerMediaRepository implements MediaRepository {
   @override
   Future<Set<int>?> systemTrashedMediaStoreIds() async {
     try {
-      final ids = await _trashChannel.invokeMethod<List<Object?>>(
+      final ids = await _nativeChannel.invokeMethod<List<Object?>>(
         'getTrashedMediaStoreIds',
       );
       if (ids == null) return const {};
@@ -153,27 +154,30 @@ class PhotoManagerMediaRepository implements MediaRepository {
   }
 
   @override
-  Future<bool> moveAssetsToRelativePath(
-    List<int> mediaStoreIds,
-    String targetRelativePath,
+  Future<List<int>> moveAssetsToPaths(
+    Map<int, String> targetRelativePathByMediaStoreId,
   ) async {
-    if (mediaStoreIds.isEmpty) return true;
-    final assets = await Future.wait(
-      mediaStoreIds.map((id) => AssetEntity.fromId(id.toString())),
-    );
-    final valid = assets.whereType<AssetEntity>().toList();
-    if (valid.isEmpty) return false;
-
+    if (targetRelativePathByMediaStoreId.isEmpty) return const [];
     try {
-      return await PhotoManager.editor.android.moveAssetsToPath(
-        entities: valid,
-        targetPath: targetRelativePath,
+      final moved = await _nativeChannel.invokeMethod<List<Object?>>(
+        'moveAssetsToPaths',
+        {
+          'moves': [
+            for (final entry in targetRelativePathByMediaStoreId.entries)
+              {
+                'mediaStoreId': entry.key,
+                'targetRelativePath': entry.value,
+              },
+          ],
+        },
       );
+      if (moved == null) return const [];
+      return moved.whereType<int>().toList();
     } catch (_) {
       // §7 — cancelamento do diálogo do sistema ou qualquer outra
       // falha vira "não moveu nada" pro AlbumMoveService, nunca uma
-      // exceção subindo até a UI. O lote continua `albumMovePending`.
-      return false;
+      // exceção subindo até a UI. Os itens continuam pendentes.
+      return const [];
     }
   }
 }

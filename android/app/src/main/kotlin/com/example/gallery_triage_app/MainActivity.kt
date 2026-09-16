@@ -1,6 +1,10 @@
 package com.example.gallery_triage_app
 
 import android.content.ContentResolver
+import android.content.ContentUris
+import android.content.ContentValues
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.provider.MediaStore
 import io.flutter.embedding.android.FlutterActivity
@@ -8,23 +12,39 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
 /**
- * 2.1.5 — canal nativo só para o que `photo_manager` não expõe: quais
- * itens estão na lixeira do sistema agora (`IS_TRASHED`), inclusive os
- * retidos por fora deste app (outro app, Fotos do sistema). Sem isso o
- * `SyncService` só conseguia reconhecer o que o próprio app trashava
- * (`moveToSystemTrash`) e não distinguia retido de órfão de verdade
- * (5.5.2/5.5.4). `minSdk` já é 30 (4.1.1): `QUERY_ARG_MATCH_TRASHED` e
- * `IS_TRASHED` estão sempre disponíveis, sem checagem de versão.
+ * Canal nativo só para o que `photo_manager` não expõe (ou expõe de
+ * um jeito que não serve aqui):
+ *
+ * - 2.1.5 — quais itens estão na lixeira do sistema agora
+ *   (`IS_TRASHED`), inclusive os retidos por fora deste app (outro
+ *   app, Fotos do sistema). Sem isso o `SyncService` só reconhecia o
+ *   que o próprio app trashava (`moveToSystemTrash`) e não distinguia
+ *   retido de órfão de verdade (5.5.2/5.5.4).
+ * - 6.5.7 — mover um lote heterogêneo (cada item com seu próprio
+ *   destino) num único diálogo do sistema. `photo_manager.editor
+ *   .android.moveAssetsToPath` só aceita um destino por chamada — um
+ *   lote com vários álbuns viraria um diálogo por álbum. Implementado
+ *   aqui do mesmo jeito que o próprio `photo_manager` faz por baixo
+ *   dos panos (`createWriteRequest` + `startIntentSenderForResult`),
+ *   só que pedindo a concessão pra todos os URIs de uma vez, não
+ *   importa quantos destinos diferentes eles têm.
+ *
+ * `minSdk` já é 30 (4.1.1): `QUERY_ARG_MATCH_TRASHED`, `IS_TRASHED` e
+ * `createWriteRequest` estão sempre disponíveis, sem checagem de
+ * versão em runtime.
  */
 class MainActivity : FlutterActivity() {
+    private var pendingMoveResult: MethodChannel.Result? = null
+    private var pendingMoveTargets: Map<Uri, String>? = null
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL)
             .setMethodCallHandler { call, result ->
-                if (call.method == "getTrashedMediaStoreIds") {
-                    result.success(trashedMediaStoreIds())
-                } else {
-                    result.notImplemented()
+                when (call.method) {
+                    "getTrashedMediaStoreIds" -> result.success(trashedMediaStoreIds())
+                    "moveAssetsToPaths" -> handleMoveAssetsToPaths(call, result)
+                    else -> result.notImplemented()
                 }
             }
     }
@@ -61,7 +81,96 @@ class MainActivity : FlutterActivity() {
         return ids
     }
 
+    @Suppress("UNCHECKED_CAST")
+    private fun handleMoveAssetsToPaths(call: MethodChannel.MethodCall, result: MethodChannel.Result) {
+        val moves = call.argument<List<Map<String, Any>>>("moves")
+        if (moves == null) {
+            result.error("invalid_args", "\"moves\" ausente", null)
+            return
+        }
+        if (moves.isEmpty()) {
+            result.success(emptyList<Long>())
+            return
+        }
+
+        val filesUri = MediaStore.Files.getContentUri(MediaStore.VOLUME_EXTERNAL)
+        val targets = moves.associate { move ->
+            val id = (move["mediaStoreId"] as Number).toLong()
+            val path = move["targetRelativePath"] as String
+            ContentUris.withAppendedId(filesUri, id) to path
+        }
+
+        // Só um diálogo por lote, não importa quantos destinos
+        // diferentes existam nele (6.5.7) — a concessão cobre todos os
+        // URIs pedidos de uma vez; cada `ContentResolver.update` já
+        // aplicado depois (`onActivityResult`) não pede confirmação de
+        // novo.
+        pendingMoveResult = result
+        pendingMoveTargets = targets
+
+        try {
+            val pendingIntent = MediaStore.createWriteRequest(contentResolver, targets.keys.toList())
+            startIntentSenderForResult(
+                pendingIntent.intentSender,
+                MOVE_REQUEST_CODE,
+                null,
+                0,
+                0,
+                0,
+            )
+        } catch (e: Exception) {
+            pendingMoveResult = null
+            pendingMoveTargets = null
+            result.success(emptyList<Long>())
+        }
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        if (requestCode == MOVE_REQUEST_CODE) {
+            val targets = pendingMoveTargets
+            val callback = pendingMoveResult
+            pendingMoveTargets = null
+            pendingMoveResult = null
+
+            // RESULT_CANCELED (usuário recusou o diálogo) — nenhum
+            // arquivo é tocado, lista vazia; os itens continuam
+            // `albumMovePending` do lado Dart, tentam de novo depois.
+            if (resultCode == RESULT_OK && targets != null) {
+                callback?.success(applyMoves(targets))
+            } else {
+                callback?.success(emptyList<Long>())
+            }
+            return
+        }
+        // Qualquer outro código é de outro plugin (photo_manager,
+        // permission_handler) — o embedding do Flutter distribui isso
+        // pros `ActivityResultListener` registrados por eles.
+        super.onActivityResult(requestCode, resultCode, data)
+    }
+
+    /**
+     * Já com a concessão de escrita obtida (§7 — cada arquivo ainda
+     * pode falhar individualmente, ex.: removido nesse meio-tempo).
+     * Retorna só os `mediaStoreId` efetivamente movidos.
+     */
+    private fun applyMoves(targets: Map<Uri, String>): List<Long> {
+        val moved = mutableListOf<Long>()
+        val values = ContentValues()
+        for ((uri, path) in targets) {
+            values.clear()
+            values.put(MediaStore.MediaColumns.RELATIVE_PATH, path)
+            val updated = try {
+                contentResolver.update(uri, values, null, null) > 0
+            } catch (e: Exception) {
+                false
+            }
+            if (updated) moved.add(ContentUris.parseId(uri))
+        }
+        return moved
+    }
+
     private companion object {
-        const val CHANNEL = "gallery_triage_app/media_trash"
+        const val CHANNEL = "gallery_triage_app/media_native"
+        const val MOVE_REQUEST_CODE = 40987
     }
 }
