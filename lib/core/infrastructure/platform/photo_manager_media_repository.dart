@@ -151,4 +151,29 @@ class PhotoManagerMediaRepository implements MediaRepository {
       return null;
     }
   }
+
+  @override
+  Future<bool> moveAssetsToRelativePath(
+    List<int> mediaStoreIds,
+    String targetRelativePath,
+  ) async {
+    if (mediaStoreIds.isEmpty) return true;
+    final assets = await Future.wait(
+      mediaStoreIds.map((id) => AssetEntity.fromId(id.toString())),
+    );
+    final valid = assets.whereType<AssetEntity>().toList();
+    if (valid.isEmpty) return false;
+
+    try {
+      return await PhotoManager.editor.android.moveAssetsToPath(
+        entities: valid,
+        targetPath: targetRelativePath,
+      );
+    } catch (_) {
+      // §7 — cancelamento do diálogo do sistema ou qualquer outra
+      // falha vira "não moveu nada" pro AlbumMoveService, nunca uma
+      // exceção subindo até a UI. O lote continua `albumMovePending`.
+      return false;
+    }
+  }
 }

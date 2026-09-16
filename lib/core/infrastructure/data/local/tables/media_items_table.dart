@@ -64,6 +64,14 @@ class MediaItemsTable extends Table {
 
   BoolColumn get isAvailable => boolean().withDefault(const Constant(true))();
 
+  /// 6.5.7 — `relativePath` de antes do primeiro álbum. `null` até o
+  /// item ser classificado pela primeira vez.
+  TextColumn get preAlbumRelativePath => text().nullable()();
+
+  /// 6.5.7 — movimento físico pendente de confirmação em lote.
+  BoolColumn get albumMovePending =>
+      boolean().withDefault(const Constant(false))();
+
   @override
   Set<Column> get primaryKey => {id};
 }

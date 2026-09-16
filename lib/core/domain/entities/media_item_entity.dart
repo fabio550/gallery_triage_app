@@ -31,6 +31,8 @@ class MediaItemEntity {
     this.trashedInSystem = false,
     this.trashedAt,
     this.isAvailable = true,
+    this.preAlbumRelativePath,
+    this.albumMovePending = false,
   })  : assert(
           mediaType == MediaType.video || durationMs == null,
           'durationMs só existe em vídeo',
@@ -89,6 +91,19 @@ class MediaItemEntity {
   /// ausência de mídia não autoriza descartar a triagem (5.5.6).
   final bool isAvailable;
 
+  /// 6.5.7 — `relativePath` de antes de entrar em QUALQUER álbum
+  /// (pasta real). Gravado uma única vez, na primeira classificação;
+  /// reclassificar pra outro álbum não sobrescreve — é o destino do
+  /// "voltar pra casa" quando o item é desclassificado ou o álbum é
+  /// excluído, não "de onde veio antes do álbum anterior".
+  final String? preAlbumRelativePath;
+
+  /// `true` quando `relativePath` ainda não reflete o destino real
+  /// esperado (pasta do álbum, se classificado; [preAlbumRelativePath],
+  /// se não) — o `AlbumMoveService` ainda não moveu o arquivo de
+  /// verdade. Confirmado em lote, não a cada swipe (6.5.7).
+  final bool albumMovePending;
+
   /// Eixo B do modelo de estados (3.1.2). Não existe campo booleano
   /// espelhando isto: dois campos podem divergir (2.2.3).
   bool get isClassified => albumId != null;
@@ -110,15 +125,38 @@ class MediaItemEntity {
 
   /// Selecionar álbum diferente do atual. Promove a decisão a `kept`
   /// (3.2.1) e substitui o vínculo anterior sem confirmação (3.2.3).
+  /// 6.5.7 — grava o "endereço de origem" só na primeira vez (some-se
+  /// depois de já pertencer a um álbum) e marca a mudança física como
+  /// pendente; o swipe continua instantâneo, o arquivo só se move de
+  /// verdade quando o `AlbumMoveService` confirmar o lote.
   MediaItemEntity assignToAlbum(String newAlbumId, DateTime at) => copyWith(
         decision: TriageDecision.kept,
         albumId: newAlbumId,
         decidedAt: at,
+        preAlbumRelativePath: preAlbumRelativePath ?? relativePath,
+        albumMovePending: true,
       );
 
   /// Tocar no álbum em que o item já está. A decisão permanece
-  /// inalterada e o cursor não avança (3.2.4).
-  MediaItemEntity unassignAlbum() => copyWith(albumId: null);
+  /// inalterada e o cursor não avança (3.2.4). 6.5.7 — também pendura
+  /// um retorno físico pra [preAlbumRelativePath], resolvido no mesmo
+  /// lote do `AlbumMoveService`.
+  MediaItemEntity unassignAlbum() => copyWith(
+        albumId: null,
+        albumMovePending: true,
+      );
+
+  /// 6.5.7 — resultado de um movimento físico bem-sucedido
+  /// (`AlbumMoveService`, via `PhotoManager.editor.android
+  /// .moveAssetsToPath`). `newRelativePath` é a pasta real de destino
+  /// (do álbum, ou [preAlbumRelativePath] quando o retorno era a
+  /// "casa"). Sem álbum depois do movimento: já está em casa, não há
+  /// mais origem a lembrar.
+  MediaItemEntity applyAlbumMove(String newRelativePath) => copyWith(
+        relativePath: newRelativePath,
+        albumMovePending: false,
+        preAlbumRelativePath: albumId == null ? null : preAlbumRelativePath,
+      );
 
   /// Swipe esquerda / Excluir. Preserva `albumId` e congela o estado
   /// anterior (3.2.5). Idempotente: reentrar na fila não sobrescreve o
@@ -182,6 +220,8 @@ class MediaItemEntity {
     bool? trashedInSystem,
     Object? trashedAt = _unset,
     bool? isAvailable,
+    Object? preAlbumRelativePath = _unset,
+    bool? albumMovePending,
   }) {
     return MediaItemEntity(
       id: id,
@@ -209,6 +249,10 @@ class MediaItemEntity {
       trashedAt:
           trashedAt == _unset ? this.trashedAt : trashedAt as DateTime?,
       isAvailable: isAvailable ?? this.isAvailable,
+      preAlbumRelativePath: preAlbumRelativePath == _unset
+          ? this.preAlbumRelativePath
+          : preAlbumRelativePath as String?,
+      albumMovePending: albumMovePending ?? this.albumMovePending,
     );
   }
 
@@ -233,7 +277,9 @@ class MediaItemEntity {
         other.preQueueAlbumId == preQueueAlbumId &&
         other.trashedInSystem == trashedInSystem &&
         other.trashedAt == trashedAt &&
-        other.isAvailable == isAvailable;
+        other.isAvailable == isAvailable &&
+        other.preAlbumRelativePath == preAlbumRelativePath &&
+        other.albumMovePending == albumMovePending;
   }
 
   @override
@@ -256,5 +302,7 @@ class MediaItemEntity {
         trashedInSystem,
         trashedAt,
         isAvailable,
+        preAlbumRelativePath,
+        albumMovePending,
       ]);
 }

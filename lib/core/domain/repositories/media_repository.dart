@@ -57,4 +57,16 @@ abstract class MediaRepository {
   /// sincronização tratar tudo que estava retido como purgado de
   /// verdade e apagar essas linhas do índice.
   Future<Set<int>?> systemTrashedMediaStoreIds();
+
+  /// 6.5.7 — move o lote inteiro pra `targetRelativePath` (pasta real,
+  /// ex.: `"Pictures/Viagem"`), via `PhotoManager.editor.android
+  /// .moveAssetsToPath` — um único diálogo do sistema
+  /// (`createWriteRequest`, API 30+) por chamada. Tudo ou nada: a API
+  /// não informa item a item, só sucesso/cancelamento do lote inteiro
+  /// (`false` em qualquer falha, nunca lança). Quem chama já garante
+  /// que todo item do lote compartilha o mesmo destino.
+  Future<bool> moveAssetsToRelativePath(
+    List<int> mediaStoreIds,
+    String targetRelativePath,
+  );
 }

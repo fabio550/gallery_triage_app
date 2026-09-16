@@ -268,17 +268,51 @@ class DriftTriageRepository implements TriageRepository {
     await (_db.update(_db.albumsTable)..where((t) => t.id.equals(albumId)))
         .write(AlbumsTableCompanion(name: Value(name)));
 
+    // 6.5.7 — pasta real: o nome antigo pode já existir fisicamente
+    // com itens dentro. Marca pendente incondicionalmente — se algum
+    // item nunca chegou a ser movido de verdade, o próximo lote só
+    // "move" pro mesmo lugar onde já está (sem custo real).
+    await (_db.update(_db.mediaItemsTable)
+          ..where((t) => t.albumId.equals(albumId)))
+        .write(const MediaItemsTableCompanion(albumMovePending: Value(true)));
+
     return AlbumEntity(id: albumId, name: name, createdAt: current.createdAt);
   }
 
   @override
   Future<void> deleteAlbum(String albumId) async {
     // 6.5.6 — desclassifica os itens vinculados (albumId null),
-    // preservando `decision` — "mantido" não muda, nenhum arquivo é
-    // tocado. Roda antes de apagar a linha do álbum em si.
-    await (_db.update(_db.mediaItemsTable)
+    // preservando `decision` — "mantido" não muda. 6.5.7 — pasta
+    // real: só quem já foi fisicamente movido pra lá (relativePath
+    // diferente da origem gravada) precisa de um movimento de volta;
+    // quem nunca chegou a mover já está "em casa", não gera trabalho
+    // à toa nem deixa `preAlbumRelativePath` pendurado sem uso.
+    final linked = await (_db.select(_db.mediaItemsTable)
           ..where((t) => t.albumId.equals(albumId)))
-        .write(const MediaItemsTableCompanion(albumId: Value(null)));
+        .get();
+
+    if (linked.isNotEmpty) {
+      final updated = linked.map((row) {
+        final item = _toEntity(row);
+        final alreadyMoved = item.preAlbumRelativePath != null &&
+            item.relativePath != item.preAlbumRelativePath;
+        // Já movido: preserva preAlbumRelativePath (é o alvo do
+        // retorno) e pendura o movimento de volta. Nunca movido: já
+        // está em casa, limpa o rastro em vez de deixar sem uso.
+        return _toCompanion(
+          alreadyMoved
+              ? item.copyWith(albumId: null, albumMovePending: true)
+              : item.copyWith(
+                  albumId: null,
+                  preAlbumRelativePath: null,
+                  albumMovePending: false,
+                ),
+        );
+      }).toList();
+      await _db.batch((batch) {
+        batch.replaceAll(_db.mediaItemsTable, updated);
+      });
+    }
 
     await (_db.delete(_db.albumsTable)..where((t) => t.id.equals(albumId)))
         .go();
@@ -286,9 +320,9 @@ class DriftTriageRepository implements TriageRepository {
 
   /// 6.5.3 — nome único (case-insensitive), sem espaços nas pontas,
   /// ≤64 caracteres, sem os separadores de caminho (`/ \ : * ? " < > |`
-  /// — antecipa o estágio 2, onde o nome vira pasta real). Compartilhado
-  /// entre [createAlbum] e [renameAlbum]; [excludingId] deixa o próprio
-  /// álbum fora da checagem de duplicidade ao renomear.
+  /// — o nome vira pasta real de verdade, `Pictures/<nome>`, 6.5.7).
+  /// Compartilhado entre [createAlbum] e [renameAlbum]; [excludingId]
+  /// deixa o próprio álbum fora da checagem de duplicidade ao renomear.
   String _validateAlbumName(
     String rawName,
     List<AlbumEntity> existing, {
@@ -327,6 +361,30 @@ class DriftTriageRepository implements TriageRepository {
         .go();
   }
 
+  @override
+  Future<List<MediaItemEntity>> itemsPendingAlbumMove() async {
+    // Exclui retido/indisponível: mover um item nessas condições tende
+    // a falhar — e como o lote é tudo-ou-nada por destino (6.5.7), um
+    // item assim juntado no grupo derrubaria os demais com ele.
+    final rows = await (_db.select(_db.mediaItemsTable)
+          ..where(
+            (t) =>
+                t.albumMovePending.equals(true) &
+                t.trashedInSystem.equals(false) &
+                t.isAvailable.equals(true),
+          ))
+        .get();
+    return rows.map(_toEntity).toList();
+  }
+
+  @override
+  Future<void> applyAlbumMoveOutcome(List<MediaItemEntity> movedItems) async {
+    if (movedItems.isEmpty) return;
+    await _db.batch((batch) {
+      batch.replaceAll(_db.mediaItemsTable, movedItems.map(_toCompanion).toList());
+    });
+  }
+
   // --- Mapeamento entidade <-> linha do Drift ---------------------------
 
   MediaItemEntity _toEntity(MediaItemsTableData row) => MediaItemEntity(
@@ -348,6 +406,8 @@ class DriftTriageRepository implements TriageRepository {
         trashedInSystem: row.trashedInSystem,
         trashedAt: row.trashedAt,
         isAvailable: row.isAvailable,
+        preAlbumRelativePath: row.preAlbumRelativePath,
+        albumMovePending: row.albumMovePending,
       );
 
   MediaItemsTableCompanion _toCompanion(MediaItemEntity item) =>
@@ -370,6 +430,8 @@ class DriftTriageRepository implements TriageRepository {
         trashedInSystem: Value(item.trashedInSystem),
         trashedAt: Value(item.trashedAt),
         isAvailable: Value(item.isAvailable),
+        preAlbumRelativePath: Value(item.preAlbumRelativePath),
+        albumMovePending: Value(item.albumMovePending),
       );
 
   // --- Filtro por categoria (3.1, 6.1.5) ---------------------------------

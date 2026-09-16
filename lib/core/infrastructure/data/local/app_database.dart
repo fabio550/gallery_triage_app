@@ -22,7 +22,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.connection);
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -33,6 +33,21 @@ class AppDatabase extends _$AppDatabase {
           // dados de triagem já indexados não são tocados.
           if (from < 2) {
             await m.createTable(preferencesTable);
+          }
+          // v3 — 6.5.7 (álbum como pasta real): novas colunas em
+          // MediaItemsTable. Sem valor pra linha existente ainda ficar
+          // "pendente" — o default (`albumMovePending` falso) é
+          // correto pra todo item já indexado antes desta versão, que
+          // nunca teve movimento físico em aberto.
+          if (from < 3) {
+            await m.addColumn(
+              mediaItemsTable,
+              mediaItemsTable.preAlbumRelativePath,
+            );
+            await m.addColumn(
+              mediaItemsTable,
+              mediaItemsTable.albumMovePending,
+            );
           }
         },
       );

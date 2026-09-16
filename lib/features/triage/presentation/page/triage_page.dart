@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:gallery_triage_app/core/application/providers/album_move_service_provider.dart';
 import 'package:gallery_triage_app/core/application/providers/albums_provider.dart';
 import 'package:gallery_triage_app/core/application/providers/last_used_album_provider.dart';
 import 'package:gallery_triage_app/core/application/providers/sort_order_provider.dart';
@@ -172,6 +173,65 @@ class _TriagePageState extends ConsumerState<TriagePage> {
     if (!stillPending) Navigator.of(context).pop();
   }
 
+  /// 6.5.7 — ponto de confirmação em lote dos movimentos físicos de
+  /// álbum (assumir álbum como pasta real), no fim da sessão: chamado
+  /// só a partir do botão explícito "Voltar ao Dashboard" da tela de
+  /// fila concluída, não do gesto de voltar do sistema (que já tem seu
+  /// próprio diálogo pra fila de exclusão, em `_handlePendingQueueOnExit`
+  /// — empilhar os dois ali seria denso demais pra uma interrupção).
+  /// O lote é global (qualquer categoria), não só desta sessão.
+  Future<void> _handleReturnToDashboard() async {
+    final service = ref.read(albumMoveServiceProvider);
+    final pendingCount = await service.pendingCount();
+    if (!mounted) return;
+
+    if (pendingCount == 0) {
+      Navigator.of(context).pop();
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Mover itens de álbum'),
+        content: Text(
+          pendingCount == 1
+              ? '1 item tem uma mudança de álbum pendente e será movido '
+                  'pra pasta real agora.'
+              : '$pendingCount itens têm mudanças de álbum pendentes e '
+                  'serão movidos pras pastas reais agora. O sistema pode '
+                  'pedir confirmação.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Deixar pra depois'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Mover agora'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      final result = await service.confirmPendingMoves();
+      if (mounted && result.hasFailures) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '${result.movedCount} movidos, ${result.failedCount} não '
+              'confirmados — tentaremos de novo mais tarde.',
+            ),
+          ),
+        );
+      }
+    }
+
+    if (mounted) Navigator.of(context).pop();
+  }
+
   @override
   Widget build(BuildContext context) {
     final category = widget.category;
@@ -276,8 +336,7 @@ class _TriagePageState extends ConsumerState<TriagePage> {
                             const SizedBox(width: 12),
                             Expanded(
                               child: FilledButton(
-                                onPressed: () =>
-                                    Navigator.of(context).pop(),
+                                onPressed: _handleReturnToDashboard,
                                 child: const Text('Voltar ao Dashboard'),
                               ),
                             ),

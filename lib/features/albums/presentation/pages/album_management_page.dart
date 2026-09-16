@@ -146,7 +146,9 @@ class AlbumManagementPage extends ConsumerWidget {
 
   /// 6.5.5 — confirmação mostrando a quantidade de itens vinculados e
   /// alertando que serão desclassificados (6.5.6: `albumId` null,
-  /// `decision` mantido intacto, nenhum arquivo tocado).
+  /// `decision` mantido intacto). 6.5.7 — nenhum arquivo é apagado, mas
+  /// quem já tinha sido movido pra pasta real do álbum volta pra pasta
+  /// de origem no próximo lote confirmado (`AlbumMoveService`).
   Future<void> _deleteAlbum(
     BuildContext context,
     WidgetRef ref,
@@ -162,7 +164,8 @@ class AlbumManagementPage extends ConsumerWidget {
               ? 'Este álbum não tem itens vinculados.'
               : '$count ${count == 1 ? 'item ficará' : 'itens ficarão'} sem '
                   'álbum. Eles continuam mantidos na galeria — nenhum '
-                  'arquivo é apagado.',
+                  'arquivo é apagado, mas quem já estava na pasta do álbum '
+                  'volta pra pasta de origem.',
         ),
         actions: [
           TextButton(

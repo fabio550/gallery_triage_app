@@ -105,18 +105,36 @@ abstract class TriageRepository {
 
   /// 6.5.4 — renomeia, sem afetar os vínculos existentes. Mesmas
   /// regras de nome de [createAlbum] (6.5.3), excluindo o próprio
-  /// álbum da checagem de duplicidade.
+  /// álbum da checagem de duplicidade. 6.5.7 — pasta real: marca
+  /// `albumMovePending` em todo item já vinculado, pro `AlbumMoveService`
+  /// mover fisicamente pro nome novo no próximo lote confirmado.
   Future<AlbumEntity> renameAlbum(String albumId, String newName);
 
   /// 6.5.5/6.5.6 — exclui o álbum. Os itens vinculados passam a
-  /// `albumId` null, preservando `decision` (mantido não muda) — não
-  /// mexe em arquivo nenhum. A contagem de itens afetados (pro diálogo
-  /// de confirmação) vem de [albumItemCounts], lida antes de chamar
-  /// isto.
+  /// `albumId` null, preservando `decision` (mantido não muda). A
+  /// contagem de itens afetados (pro diálogo de confirmação) vem de
+  /// [albumItemCounts], lida antes de chamar isto. 6.5.7 — pasta real:
+  /// nenhum arquivo é tocado aqui, mas todo item que já tinha sido
+  /// movido pra pasta do álbum é marcado `albumMovePending`, pro
+  /// `AlbumMoveService` devolvê-lo pra `preAlbumRelativePath` no
+  /// próximo lote confirmado.
   Future<void> deleteAlbum(String albumId);
 
   /// Remove as linhas de verdade — só o modo definitivo chama isto
   /// (4.4.4); o modo lixeira usa [markTrashedInSystem], que preserva a
   /// linha (3.6.1).
   Future<void> deleteItems(List<String> ids);
+
+  /// 6.5.7 — todo item com `albumMovePending` true, em qualquer
+  /// categoria (o movimento físico não é escopado por sessão de
+  /// triagem, diferente da fila de exclusão). Usado pelo
+  /// `AlbumMoveService` pra montar o lote confirmado no fim da sessão.
+  Future<List<MediaItemEntity>> itemsPendingAlbumMove();
+
+  /// 6.5.7 — grava o resultado de um lote de movimentos físicos bem
+  /// sucedidos (entidades já transitadas via
+  /// [MediaItemEntity.applyAlbumMove]). Só os itens realmente movidos
+  /// entram aqui — os que falharam continuam `albumMovePending` true,
+  /// pro próximo lote tentar de novo.
+  Future<void> applyAlbumMoveOutcome(List<MediaItemEntity> movedItems);
 }
