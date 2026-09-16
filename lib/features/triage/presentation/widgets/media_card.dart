@@ -35,9 +35,16 @@ class MediaCard extends ConsumerWidget {
       thumbnailProvider((item.mediaStoreId, _cardThumbnailSize)),
     );
 
+    // Card quadrado, mas o tamanho acompanha a tela em vez de fixo:
+    // 400 sozinho já é mais largo que a maioria dos aparelhos (~360 a
+    // 430dp de largura lógica), o que ultrapassava a tela. Telas
+    // maiores (tablet) ficam limitadas ao tamanho original.
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final cardSize = (screenWidth - 48).clamp(160.0, 400.0);
+
     return Container(
-      width: 400,
-      height: 400,
+      width: cardSize,
+      height: cardSize,
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         color: mediaPlaceholderColor(item.id),

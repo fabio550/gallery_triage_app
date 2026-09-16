@@ -27,12 +27,11 @@ class GranularitySelector extends StatelessWidget {
 
     return SizedBox(
       width: double.infinity,
+      // Sem `shape` próprio: herda o `CardThemeData` do app (raio 18,
+      // sem borda) — tinha um raio menor e uma borda visível só aqui,
+      // destoando de todo outro Card do app.
       child: Card(
         clipBehavior: Clip.antiAlias,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(10),
-          side: BorderSide(color: colors.outline),
-        ),
         child: InkWell(
           onTap: () => _open(context),
           child: Padding(

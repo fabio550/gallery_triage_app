@@ -446,12 +446,17 @@ class _TriagePageState extends ConsumerState<TriagePage> {
                   ),
                   // Overlay topo-esquerdo (6.2.10). Desabilitado com a
                   // pilha vazia — `onPressed: null` já cobre isso, sem
-                  // precisar de um estado visual separado.
+                  // precisar de um estado visual separado. Estilo
+                  // próprio (não o tonal padrão do M3): estes botões
+                  // flutuam sobre a foto, não sobre uma superfície do
+                  // tema — seguem o mesmo tratamento da pílula de
+                  // álbum abaixo (fundo escuro translúcido, ícone
+                  // branco), não o da barra de ação embaixo.
                   Positioned(
                     top: 8,
                     left: 8,
-                    child: IconButton.filledTonal(
-                      icon: const Icon(Icons.undo),
+                    child: _CardOverlayButton(
+                      icon: Icons.undo,
                       tooltip: 'Desfazer',
                       onPressed: session.canUndo ? notifier.undo : null,
                     ),
@@ -460,8 +465,8 @@ class _TriagePageState extends ConsumerState<TriagePage> {
                   Positioned(
                     top: 8,
                     right: 8,
-                    child: IconButton.filledTonal(
-                      icon: const Icon(Icons.info_outline),
+                    child: _CardOverlayButton(
+                      icon: Icons.info_outline,
                       tooltip: 'Informações',
                       onPressed: () => showMediaInfoModal(context, current),
                     ),
@@ -529,16 +534,53 @@ class _TriagePageState extends ConsumerState<TriagePage> {
                 ),
               ),
             ),
-            TriageActionBar(
-              onDelete: notifier.markForDeletion,
-              onSkip: notifier.skip,
-              onKeep: notifier.keep,
-              isVideo: current.isVideo,
-              isPlaying: _isPlaying,
-              onTogglePlay: () => setState(() => _isPlaying = !_isPlaying),
-            ),
           ],
         ),
+        // Fora do body, no slot que o Scaffold já protege da barra de
+        // navegação do sistema — mesmo padrão de `TriageReviewPage`.
+        // Direto no body (como estava) a fileira de baixo ficava sob a
+        // barra de gestos em aparelhos sem os três botões clássicos.
+        bottomNavigationBar: SafeArea(
+          child: TriageActionBar(
+            onDelete: notifier.markForDeletion,
+            onSkip: notifier.skip,
+            onKeep: notifier.keep,
+            isVideo: current.isVideo,
+            isPlaying: _isPlaying,
+            onTogglePlay: () => setState(() => _isPlaying = !_isPlaying),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Botão flutuando sobre a foto/vídeo (6.2.10/6.2.11) — mesmo
+/// tratamento da pílula de último álbum (fundo escuro translúcido,
+/// ícone branco): sobre conteúdo de foto arbitrário, cor do tema não
+/// garante contraste.
+class _CardOverlayButton extends StatelessWidget {
+  const _CardOverlayButton({
+    required this.icon,
+    required this.tooltip,
+    required this.onPressed,
+  });
+
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.black.withValues(alpha: 0.55),
+      shape: const CircleBorder(),
+      child: IconButton(
+        icon: Icon(icon),
+        tooltip: tooltip,
+        color: Colors.white,
+        disabledColor: Colors.white38,
+        onPressed: onPressed,
       ),
     );
   }

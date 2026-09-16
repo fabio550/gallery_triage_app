@@ -68,10 +68,11 @@ class CategoryTile extends StatelessWidget {
             (_showMetrics) ?
               ProgressCircular(
                 context: context,
-                progressPercent: summary.keptItems / summary.totalItems,
+                progressPercent: summary.totalItems == 0
+                    ? 0
+                    : summary.keptItems / summary.totalItems,
                 progressColor: triageColors.stateKept,
               ) : Icon(Icons.chevron_right, color: colors.onSurfaceVariant),
-            Divider(),
           ],
         ),
       ),

@@ -21,8 +21,12 @@ class InfoStatsCard extends StatelessWidget {
   Widget build(BuildContext context) {
     
     final triageColors = context.triageColors;
-    final classifiedIPercent = classifiedItems / totalItems;
-    final keptPercent = keptItems / totalItems;
+    // Galeria vazia/recém-sincronizada: totalItems 0 faria os círculos
+    // virarem NaN em vez de 0% (ProgressBar já se protegia disso, os
+    // círculos aqui não).
+    final total = totalItems == 0 ? 1 : totalItems;
+    final classifiedPercent = classifiedItems / total;
+    final keptPercent = keptItems / total;
 
     return Card(
       child: Padding(
@@ -56,7 +60,7 @@ class InfoStatsCard extends StatelessWidget {
               children: [
                 ProgressCircular(
                   context: context,
-                  progressPercent: classifiedIPercent,
+                  progressPercent: classifiedPercent,
                   progressColor: triageColors.stateClassified,
                 ),
                 SizedBox(height: 20,),

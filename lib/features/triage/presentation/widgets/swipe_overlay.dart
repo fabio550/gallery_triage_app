@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:gallery_triage_app/core/presentation/theme/triage_colors.dart';
 
 /// Lavagem de cor com ícone e rótulo, opacidade proporcional ao
 /// deslocamento. O texto não é decoração: vermelho e verde são o par
@@ -26,12 +27,16 @@ class SwipeOverlay extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final triageColors = context.triageColors;
+
     if (horizontalProgress.abs() > 0.02) {
       final toRight = horizontalProgress > 0;
       return _overlay(
         context,
         opacity: horizontalProgress.abs(),
-        color: toRight ? const Color(0xFF4C8DFF) : const Color(0xFFF2554B),
+        color: toRight
+            ? triageColors.stateKept
+            : triageColors.stateMarkedForDeletion,
         icon: toRight ? Icons.check : Icons.delete_outline,
         label: toRight ? 'Manter' : 'Excluir',
       );
@@ -41,7 +46,9 @@ class SwipeOverlay extends StatelessWidget {
       return _overlay(
         context,
         opacity: verticalProgress.abs(),
-        color: const Color(0xFF3DAA6B),
+        // Mesmo verde de "classificado" em todo o resto do app — antes
+        // era um verde parecido, mas não o mesmo hex (lia como bug).
+        color: triageColors.stateClassified,
         icon: Icons.photo_album_outlined,
         label: lastUsedAlbumLabel!,
       );
@@ -51,7 +58,7 @@ class SwipeOverlay extends StatelessWidget {
       return _overlay(
         context,
         opacity: verticalProgress,
-        color: const Color(0xFF808080),
+        color: Theme.of(context).colorScheme.onSurfaceVariant,
         icon: Icons.expand_more,
         label: 'Álbuns',
       );

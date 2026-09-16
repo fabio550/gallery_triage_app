@@ -21,9 +21,13 @@ class CategoryList extends StatelessWidget {
 
     final isAlbum = granularity == CategoryGranularity.album;
 
-    return ListView.builder(
+    return ListView.separated(
       padding: const EdgeInsets.only(bottom: 24),
       itemCount: categories.length,
+      // Separador entre linhas (era um `Divider()` dentro da própria
+      // `CategoryTile`, dentro da Row com capa/texto/círculo — não
+      // tinha como renderizar certo ali).
+      separatorBuilder: (context, index) => const Divider(height: 1),
       itemBuilder: (context, index) {
         final summary = categories[index];
         return isAlbum ?
