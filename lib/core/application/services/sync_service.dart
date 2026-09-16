@@ -77,10 +77,12 @@ class SyncService {
 
   /// 5.3 — sincronização incremental. Sempre uma passada completa do
   /// início: sem o `MethodChannel` nativo de `MediaStore.getGeneration`
-  /// (5.3.2, fora do escopo desta etapa — só o de itens na lixeira,
-  /// 2.1.5, está previsto), o caminho de fallback de 5.3.3 generaliza
-  /// pra "recomparar tudo", que é o que acontece aqui via
-  /// [TriageRepository.indexedMediaStoreIds].
+  /// (5.3.2, ainda fora de escopo), o caminho de fallback de 5.3.3
+  /// generaliza pra "recomparar tudo", que é o que acontece aqui via
+  /// [TriageRepository.indexedMediaStoreIds]. O canal nativo de itens
+  /// na lixeira (2.1.5) já existe — usado abaixo pra reconciliar
+  /// `trashedInSystem` com o estado real do MediaStore, inclusive o
+  /// que foi retido/purgado por fora deste app.
   Future<void> runIncrementalSync() async {
     await _media.ensureReady();
 
@@ -89,6 +91,11 @@ class SyncService {
     // normais do MediaStore por definição; sem isolar isso, o diff
     // abaixo os classificaria como órfãos.
     final trashedIds = await _triage.trashedMediaStoreIds();
+    // 2.1.5 — verdade atual do MediaStore (`IS_TRASHED`), via canal
+    // nativo. `trashedIds` acima é só o que o próprio app retém
+    // (`moveToSystemTrash`); isto cobre também o que foi retido por
+    // fora (Fotos do sistema, outro app) e permite detectar purga real.
+    final systemTrashedIds = await _media.systemTrashedMediaStoreIds();
     final seen = <int>{};
     // 3.6.3/5.5.5 — retido que reaparece na varredura foi restaurado
     // pelo usuário na lixeira do sistema, não é item novo.
@@ -115,14 +122,46 @@ class SyncService {
       await _triage.restoreFromSystemTrash(reappearedTrashed);
     }
 
-    // 5.5.6 — ausência não decorre necessariamente de exclusão de
-    // verdade (pode ser acesso parcial ou volume desmontado, e sem o
-    // canal nativo de 5.5.2 não dá pra distinguir órfão de retido).
-    // Marca indisponível, nunca apaga o registro aqui — 5.5.4 (purga de
-    // órfão de verdade) fica pra quando esse canal existir. Exclui os
-    // já retidos (`trashedIds`): a ausência deles é esperada, não um
-    // sinal de problema.
-    final missing = existingIds.difference(seen).difference(trashedIds);
+    // `null` = canal indisponível ou falhou nesta rodada — nunca
+    // tratado como "nada retido agora" (ver motivo no contrato de
+    // `MediaRepository.systemTrashedMediaStoreIds`); a reconciliação
+    // abaixo simplesmente não roda, mantendo o comportamento anterior
+    // à 2.1.5 (só `trashedIds` importa) em vez de arriscar apagar
+    // linha de item que continua retido de verdade.
+    if (systemTrashedIds != null) {
+      // 5.5.2/5.5.3 — retido na lixeira do sistema por fora deste app:
+      // não passou por `moveToSystemTrash`, então `trashedIds` (nosso
+      // próprio registro) não sabia. Só o canal nativo resolve isso.
+      final newlyTrashedExternally =
+          systemTrashedIds.intersection(existingIds).difference(trashedIds);
+      if (newlyTrashedExternally.isNotEmpty) {
+        await _triage.markTrashedInSystemByMediaStoreId(
+          newlyTrashedExternally,
+          DateTime.now(),
+        );
+      }
+
+      // 5.5.4 — estava retido e não está mais nem na lixeira do
+      // sistema nem na varredura normal: foi purgado de verdade
+      // (expirou os 30 dias, ou a lixeira foi esvaziada por fora do
+      // app). Órfão confirmado — diferente do caso ambíguo de
+      // `missing` abaixo, remove a linha em vez de só marcar
+      // indisponível.
+      final purgedFromTrash =
+          trashedIds.difference(systemTrashedIds).difference(seen);
+      if (purgedFromTrash.isNotEmpty) {
+        await _triage.deleteByMediaStoreIds(purgedFromTrash);
+      }
+    }
+
+    // 5.5.6 — ausência que não é retenção (própria ou externa) nem
+    // purga confirmada ainda pode ser acesso parcial ou volume
+    // desmontado — o canal nativo não distingue esses dois casos.
+    // Marca indisponível, nunca apaga o registro aqui.
+    final missing = existingIds
+        .difference(seen)
+        .difference(trashedIds)
+        .difference(systemTrashedIds ?? const {});
     if (missing.isNotEmpty) {
       await _triage.markUnavailable(missing);
     }
@@ -131,9 +170,9 @@ class SyncService {
     // não retido na lixeira) e reaparece (volume remontado) é visto
     // aqui — entra em `seen` — mas como já está em `existingIds`,
     // `_buildNewEntities` pula ele e ninguém restaura `isAvailable`
-    // pra true. Sem impacto na detecção de itens novos/ausentes;
-    // revisitar junto da distinção órfão/retido de 5.5, que depende do
-    // mesmo canal nativo ainda não construído (2.1.5).
+    // pra true. Sem impacto na detecção de itens novos/ausentes/
+    // retidos — gap isolado, independente do canal nativo de lixeira
+    // (2.1.5, já usado acima).
     await _bumpLastSync();
   }
 

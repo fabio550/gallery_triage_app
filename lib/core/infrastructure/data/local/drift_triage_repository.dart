@@ -128,6 +128,30 @@ class DriftTriageRepository implements TriageRepository {
   }
 
   @override
+  Future<void> markTrashedInSystemByMediaStoreId(
+    Set<int> mediaStoreIds,
+    DateTime at,
+  ) async {
+    if (mediaStoreIds.isEmpty) return;
+    await (_db.update(_db.mediaItemsTable)
+          ..where((t) => t.mediaStoreId.isIn(mediaStoreIds)))
+        .write(
+      MediaItemsTableCompanion(
+        trashedInSystem: const Value(true),
+        trashedAt: Value(at),
+      ),
+    );
+  }
+
+  @override
+  Future<void> deleteByMediaStoreIds(Set<int> mediaStoreIds) async {
+    if (mediaStoreIds.isEmpty) return;
+    await (_db.delete(_db.mediaItemsTable)
+          ..where((t) => t.mediaStoreId.isIn(mediaStoreIds)))
+        .go();
+  }
+
+  @override
   Future<List<CategorySummary>> categoriesFor(
     CategoryGranularity granularity,
   ) async {

@@ -45,4 +45,16 @@ abstract class MediaRepository {
   /// lote único e retorno pelo processado de fato (4.3.5/4.3.6).
   /// Irreversível (4.4.4).
   Future<List<int>> deletePermanently(List<int> mediaStoreIds);
+
+  /// 2.1.5 — `mediaStoreId` de tudo que está na lixeira do sistema
+  /// agora (`IS_TRASHED`), via canal nativo. Cobre também o que foi
+  /// retido por fora deste app (outro app, Fotos do sistema) — algo
+  /// que `photo_manager` não expõe.
+  ///
+  /// `null` quando o canal falha ou está indisponível — nunca vira
+  /// exceção pro `SyncService` (§7), mas também nunca é confundido com
+  /// "nada retido agora": um conjunto vazio por falha de canal faria a
+  /// sincronização tratar tudo que estava retido como purgado de
+  /// verdade e apagar essas linhas do índice.
+  Future<Set<int>?> systemTrashedMediaStoreIds();
 }

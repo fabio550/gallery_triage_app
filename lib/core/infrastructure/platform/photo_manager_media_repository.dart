@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import 'package:flutter/services.dart';
 import 'package:gallery_triage_app/core/domain/enums/triage_decision.dart';
 import 'package:gallery_triage_app/core/domain/models/media_store_asset.dart';
 import 'package:gallery_triage_app/core/domain/repositories/media_repository.dart';
@@ -8,6 +9,10 @@ import 'package:photo_manager/photo_manager.dart';
 /// Implementação Android via `photo_manager` (2.1.4). O app não tem
 /// suporte a iOS (1.2) — sem ramo de plataforma aqui.
 class PhotoManagerMediaRepository implements MediaRepository {
+  // 2.1.5 — o que `photo_manager` não expõe (itens na lixeira do
+  // sistema, inclusive os retidos por fora deste app) sai pelo canal
+  // nativo próprio, registrado em `MainActivity.kt`.
+  static const _trashChannel = MethodChannel('gallery_triage_app/media_trash');
   @override
   Future<void> ensureReady() async {
     // Handshake com o plugin — a permissão real já foi concedida via
@@ -128,4 +133,22 @@ class PhotoManagerMediaRepository implements MediaRepository {
 
   List<int> _parseIds(List<String> ids) =>
       ids.map(int.tryParse).whereType<int>().toList();
+
+  @override
+  Future<Set<int>?> systemTrashedMediaStoreIds() async {
+    try {
+      final ids = await _trashChannel.invokeMethod<List<Object?>>(
+        'getTrashedMediaStoreIds',
+      );
+      if (ids == null) return const {};
+      return ids.whereType<int>().toSet();
+    } on PlatformException catch (_) {
+      // §7 — falha do canal nunca deve travar a sincronização, mas
+      // `null` (não conjunto vazio) sinaliza "sem verdade agora" pro
+      // `SyncService` — ver motivo no contrato do repositório.
+      return null;
+    } on MissingPluginException catch (_) {
+      return null;
+    }
+  }
 }

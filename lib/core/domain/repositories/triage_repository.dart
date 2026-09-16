@@ -46,10 +46,11 @@ abstract class TriageRepository {
   /// novos de já conhecidos (2.5.4) sem reconstruir a entidade inteira.
   Future<Set<int>> indexedMediaStoreIds();
 
-  /// 5.5.6 — item ausente da varredura, mas sem confirmação de que é
-  /// órfão de verdade (sem o canal nativo de 5.5.2 ainda não dá pra
-  /// distinguir de retido na lixeira do sistema). Marca `isAvailable`
-  /// false em vez de excluir — reversível se o item reaparecer.
+  /// 5.5.6 — item ausente da varredura que também não está retido na
+  /// lixeira do sistema (checado via canal nativo, 2.1.5) nem foi
+  /// purgado de lá — ainda ambíguo entre órfão de verdade e volume
+  /// desmontado, então marca `isAvailable` false em vez de excluir;
+  /// reversível se o item reaparecer.
   Future<void> markUnavailable(Set<int> mediaStoreIds);
 
   /// 3.6.1 — confirmação de `createTrashRequest` com `RESULT_OK`.
@@ -69,6 +70,24 @@ abstract class TriageRepository {
   /// Marca `trashedInSystem` false e limpa `trashedAt`, preservando
   /// decisão e álbum — não é tratado como item novo.
   Future<void> restoreFromSystemTrash(Set<int> mediaStoreIds);
+
+  /// 5.5.2/5.5.3 — retido na lixeira do sistema por fora deste app
+  /// (outro app, Fotos do sistema) — descoberto via canal nativo
+  /// (2.1.5), não pelo fluxo próprio de `moveToSystemTrash`/
+  /// [markTrashedInSystem]. Mesmo efeito daquele, mas indexado por
+  /// `mediaStoreId` porque o `SyncService` não tem o `id` local aqui.
+  Future<void> markTrashedInSystemByMediaStoreId(
+    Set<int> mediaStoreIds,
+    DateTime at,
+  );
+
+  /// 5.5.4 — item que estava retido na lixeira do sistema e não está
+  /// mais lá (canal nativo, 2.1.5) nem voltou a aparecer na varredura
+  /// normal: foi purgado de verdade (expirou os 30 dias, ou a lixeira
+  /// foi esvaziada por fora do app). Remove a linha — diferente de
+  /// [markUnavailable], que preserva o registro por ser um caso
+  /// ambíguo.
+  Future<void> deleteByMediaStoreIds(Set<int> mediaStoreIds);
 
   /// 5.4.1 — restaura todo item com `decision naLixeira` e
   /// `trashedInSystem` false a partir de `preQueueDecision`/
