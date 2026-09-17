@@ -3,7 +3,12 @@
 *.log
 *.pyc
 *.swp
+*~
 .DS_Store
+
+# Logs de build salvos manualmente pra depuração (ex.: flutter run
+# --verbose > build_log.txt) — não é artefato do projeto.
+build_log.txt
 .atom/
 .build/
 .buildlog/
