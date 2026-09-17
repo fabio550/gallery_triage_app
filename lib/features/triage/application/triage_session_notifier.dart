@@ -130,10 +130,12 @@ class TriageSessionNotifier extends Notifier<TriageSessionState> {
   }
 
   /// 6.2.3 — reordena a sessão já carregada quando a preferência global
-  /// muda, sem recarregar do Drift. Mantém o cursor no mesmo item, não
-  /// na mesma posição numérica.
+  /// muda, sem recarregar do Drift. Mantém a mesma posição numérica
+  /// (item 3 de 175 continua item 3 de 175), não o mesmo item — inverter
+  /// a ordem move o item atual pra ponta oposta da lista (item 3 vira
+  /// item 173 numa lista de 175), o que lia como um salto estranho pro
+  /// meio da lista em vez de "virou a ordem".
   void _applySortOrder(SortOrder order) {
-    final currentItemId = state.currentItem?.id;
     final items = [...state.items]
       ..sort(
         order == SortOrder.newestFirst
@@ -141,14 +143,10 @@ class TriageSessionNotifier extends Notifier<TriageSessionState> {
             : (a, b) => a.dateTaken.compareTo(b.dateTaken),
       );
 
-    final newIndex = currentItemId == null
-        ? state.currentIndex
-        : items.indexWhere((i) => i.id == currentItemId);
-
-    state = state.copyWith(
-      items: items,
-      currentIndex: newIndex == -1 ? state.currentIndex : newIndex,
-    );
+    state = state.copyWith(items: items);
+    // O item nesta posição mudou — persiste o novo pra não reabrir a
+    // categoria depois apontando pro item antigo (6.2.4).
+    _persistCursor();
   }
 
   // --- Decisões (3.4) ------------------------------------------------
