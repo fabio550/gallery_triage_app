@@ -117,7 +117,7 @@ class PhotoManagerMediaRepository implements MediaRepository {
     final valid = assets.whereType<AssetEntity>().toList();
     if (valid.isEmpty) return const [];
 
-    final trashed = await PhotoManager.editor.moveToTrash(valid);
+    final trashed = await PhotoManager.editor.android.moveToTrash(valid);
     return _parseIds(trashed);
   }
 
