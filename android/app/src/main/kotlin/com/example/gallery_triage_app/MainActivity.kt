@@ -9,6 +9,7 @@ import android.os.Bundle
 import android.provider.MediaStore
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
+import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 
 /**
@@ -82,7 +83,7 @@ class MainActivity : FlutterActivity() {
     }
 
     @Suppress("UNCHECKED_CAST")
-    private fun handleMoveAssetsToPaths(call: MethodChannel.MethodCall, result: MethodChannel.Result) {
+    private fun handleMoveAssetsToPaths(call: MethodCall, result: MethodChannel.Result) {
         val moves = call.argument<List<Map<String, Any>>>("moves")
         if (moves == null) {
             result.error("invalid_args", "\"moves\" ausente", null)
