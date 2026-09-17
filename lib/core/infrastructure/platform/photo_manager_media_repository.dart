@@ -112,14 +112,16 @@ class PhotoManagerMediaRepository implements MediaRepository {
     // `moveToTrash` pede `AssetEntity`, não IDs crus — diferente de
     // `deleteWithIds` (abaixo). Itens que já sumiram do MediaStore
     // entre a leitura da fila e o toque em Excluir viram `null` e são
-    // descartados sem quebrar o lote inteiro.
+    // descartados sem quebrar o lote inteiro. Vive em `.android` (não
+    // na `Editor` base): é conceito específico do Android
+    // (`MediaStore.createTrashRequest`), sem equivalente no iOS.
     final assets = await Future.wait(
       mediaStoreIds.map((id) => AssetEntity.fromId(id.toString())),
     );
     final valid = assets.whereType<AssetEntity>().toList();
     if (valid.isEmpty) return const [];
 
-    final trashed = await PhotoManager.editor.moveToTrash(valid);
+    final trashed = await PhotoManager.editor.android.moveToTrash(valid);
     return _parseIds(trashed);
   }
 
