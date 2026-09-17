@@ -173,16 +173,15 @@ class _TriagePageState extends ConsumerState<TriagePage> {
     if (!stillPending) Navigator.of(context).pop();
   }
 
-  /// 6.5.7 — ponto de confirmação em lote dos movimentos físicos de
-  /// álbum (assumir álbum como pasta real), no fim da sessão: chamado
-  /// só a partir do botão explícito "Voltar ao Dashboard" da tela de
-  /// fila concluída, não do gesto de voltar do sistema (que já tem seu
-  /// próprio diálogo pra fila de exclusão, em `_handlePendingQueueOnExit`
-  /// — empilhar os dois ali seria denso demais pra uma interrupção).
-  /// O lote é global (qualquer categoria), não só desta sessão.
+  /// 6.5.7 — ponto de checagem dos movimentos físicos de álbum
+  /// pendentes (assumir álbum como pasta real) no fim da sessão,
+  /// chamado a partir do botão explícito "Voltar ao Dashboard" da tela
+  /// de fila concluída. O lote é global (qualquer categoria, não só
+  /// esta sessão) — por isso a checagem é assíncrona aqui em vez de
+  /// vir de `session`. Reaproveita a mesma Tela de Revisão unificada
+  /// (6.3) que a fila de exclusão usa, em vez de um diálogo à parte.
   Future<void> _handleReturnToDashboard() async {
-    final service = ref.read(albumMoveServiceProvider);
-    final pendingCount = await service.pendingCount();
+    final pendingCount = await ref.read(albumMoveServiceProvider).pendingCount();
     if (!mounted) return;
 
     if (pendingCount == 0) {
@@ -190,45 +189,7 @@ class _TriagePageState extends ConsumerState<TriagePage> {
       return;
     }
 
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Mover itens de álbum'),
-        content: Text(
-          pendingCount == 1
-              ? '1 item tem uma mudança de álbum pendente e será movido '
-                  'pra pasta real agora.'
-              : '$pendingCount itens têm mudanças de álbum pendentes e '
-                  'serão movidos pras pastas reais agora. O sistema pode '
-                  'pedir confirmação.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Deixar pra depois'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('Mover agora'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed == true) {
-      final result = await service.confirmPendingMoves();
-      if (mounted && result.hasFailures) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              '${result.movedCount} movidos, ${result.failedCount} não '
-              'confirmados — tentaremos de novo mais tarde.',
-            ),
-          ),
-        );
-      }
-    }
-
+    await _openReviewPage(widget.category);
     if (mounted) Navigator.of(context).pop();
   }
 
@@ -245,6 +206,12 @@ class _TriagePageState extends ConsumerState<TriagePage> {
     final lastUsedAlbumLabel =
         lastUsedAlbumId == null ? null : _albumName(albums, lastUsedAlbumId);
     final sortOrder = ref.watch(sortOrderProvider);
+    // 6.5.7 — local a esta sessão (não a contagem global real, que só
+    // é checada no "Voltar ao Dashboard"), mas reativo a cada swipe —
+    // é o que dá pro badge da AppBar acompanhar ao vivo sem precisar
+    // de outra consulta assíncrona a cada rebuild.
+    final pendingAlbumMoveCount =
+        session.items.where((i) => i.albumMovePending).length;
 
     if (session.isLoading) {
       return Scaffold(
@@ -396,15 +363,18 @@ class _TriagePageState extends ConsumerState<TriagePage> {
               ),
               onPressed: () => ref.read(sortOrderProvider.notifier).toggle(),
             ),
-            // 6.2.1 — badge com a contagem da fila na categoria ativa.
-            // Oculto com a fila vazia (7 — "Tela de Revisão
+            // 6.2.1/6.5.7 — badge combinando fila de exclusão (desta
+            // categoria) e movimentos de álbum pendentes (globais, mas
+            // só os que já passaram por esta sessão contam aqui — o
+            // resto é pego na checagem do botão "Voltar ao Dashboard").
+            // Oculto com os dois vazios (7 — "Tela de Revisão
             // inacessível").
-            if (session.queueCount > 0)
+            if (session.queueCount > 0 || pendingAlbumMoveCount > 0)
               IconButton(
-                tooltip: 'Revisar fila de exclusão',
+                tooltip: 'Revisar',
                 icon: Badge(
-                  label: Text('${session.queueCount}'),
-                  child: const Icon(Icons.delete_outline),
+                  label: Text('${session.queueCount + pendingAlbumMoveCount}'),
+                  child: const Icon(Icons.playlist_add_check),
                 ),
                 onPressed: () => _openReviewPage(category),
               ),

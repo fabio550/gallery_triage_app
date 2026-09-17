@@ -7,15 +7,13 @@ import 'package:gallery_triage_app/core/domain/repositories/triage_repository.da
 /// padrão já usado pela exclusão (4.3): o swipe/painel de álbuns só
 /// grava local e marca `albumMovePending` (instantâneo); o movimento
 /// físico de verdade — que pede confirmação do sistema — só roda
-/// quando isto é chamado, tipicamente ao sair de uma sessão de
-/// triagem.
+/// quando isto é chamado, tipicamente a partir da Tela de Revisão
+/// (6.3, unificada com a fila de exclusão).
 ///
 /// O lote pendente é global (qualquer categoria), não escopado por
 /// sessão — diferente da fila de exclusão (3.5.1), porque classificar
 /// num álbum pode acontecer em qualquer categoria e o item físico só
-/// tem uma pasta de verdade. [MediaRepository.moveAssetsToPaths] pede
-/// a concessão do sistema pro lote inteiro de uma vez só — um único
-/// diálogo, mesmo que os itens tenham destinos (álbuns) diferentes.
+/// tem uma pasta de verdade.
 class AlbumMoveService {
   AlbumMoveService({
     required MediaRepository mediaRepository,
@@ -28,20 +26,31 @@ class AlbumMoveService {
 
   static const _albumsRoot = 'Pictures';
 
-  /// 6.5.7 — só a contagem, pra decidir se vale mostrar o diálogo de
-  /// confirmação antes de sair da triagem.
+  /// Só a contagem, pra badges/gatilhos que não precisam da lista.
   Future<int> pendingCount() async {
     final pending = await _triage.itemsPendingAlbumMove();
     return pending.length;
   }
 
+  /// Lista completa, pra Tela de Revisão renderizar a grade com
+  /// miniaturas (6.3.2) — mesmo papel que `session.items` cumpre pra
+  /// fila de exclusão, só que este conjunto não vive numa sessão.
+  Future<List<MediaItemEntity>> pendingItems() =>
+      _triage.itemsPendingAlbumMove();
+
   /// Resolve o destino de cada item pendente (pasta do álbum atual, ou
   /// [MediaItemEntity.preAlbumRelativePath] pra quem foi
   /// desclassificado/teve o álbum excluído) e confirma tudo numa
   /// chamada só — um diálogo do sistema pro lote inteiro, não um por
-  /// destino.
-  Future<AlbumMoveResult> confirmPendingMoves() async {
-    final pending = await _triage.itemsPendingAlbumMove();
+  /// destino. [onlyItemIds], quando informado, restringe o lote a um
+  /// subconjunto (6.3.3-like "Mover Selecionados" na Revisão, onde o
+  /// usuário pode excluir item da confirmação); `null` processa tudo
+  /// que está pendente.
+  Future<AlbumMoveResult> confirmPendingMoves({Set<String>? onlyItemIds}) async {
+    var pending = await _triage.itemsPendingAlbumMove();
+    if (onlyItemIds != null) {
+      pending = pending.where((i) => onlyItemIds.contains(i.id)).toList();
+    }
     if (pending.isEmpty) {
       return const AlbumMoveResult(movedCount: 0, failedCount: 0);
     }
