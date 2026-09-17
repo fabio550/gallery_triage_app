@@ -213,6 +213,32 @@ class $MediaItemsTableTable extends MediaItemsTable
     ),
     defaultValue: const Constant(true),
   );
+  static const VerificationMeta _preAlbumRelativePathMeta =
+      const VerificationMeta('preAlbumRelativePath');
+  @override
+  late final GeneratedColumn<String> preAlbumRelativePath =
+      GeneratedColumn<String>(
+        'pre_album_relative_path',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _albumMovePendingMeta = const VerificationMeta(
+    'albumMovePending',
+  );
+  @override
+  late final GeneratedColumn<bool> albumMovePending = GeneratedColumn<bool>(
+    'album_move_pending',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("album_move_pending" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -233,6 +259,8 @@ class $MediaItemsTableTable extends MediaItemsTable
     trashedInSystem,
     trashedAt,
     isAvailable,
+    preAlbumRelativePath,
+    albumMovePending,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -370,6 +398,24 @@ class $MediaItemsTableTable extends MediaItemsTable
         ),
       );
     }
+    if (data.containsKey('pre_album_relative_path')) {
+      context.handle(
+        _preAlbumRelativePathMeta,
+        preAlbumRelativePath.isAcceptableOrUnknown(
+          data['pre_album_relative_path']!,
+          _preAlbumRelativePathMeta,
+        ),
+      );
+    }
+    if (data.containsKey('album_move_pending')) {
+      context.handle(
+        _albumMovePendingMeta,
+        albumMovePending.isAcceptableOrUnknown(
+          data['album_move_pending']!,
+          _albumMovePendingMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -458,6 +504,14 @@ class $MediaItemsTableTable extends MediaItemsTable
         DriftSqlType.bool,
         data['${effectivePrefix}is_available'],
       )!,
+      preAlbumRelativePath: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}pre_album_relative_path'],
+      ),
+      albumMovePending: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}album_move_pending'],
+      )!,
     );
   }
 
@@ -505,6 +559,13 @@ class MediaItemsTableData extends DataClass
   final bool trashedInSystem;
   final DateTime? trashedAt;
   final bool isAvailable;
+
+  /// 6.5.7 — `relativePath` de antes do primeiro álbum. `null` até o
+  /// item ser classificado pela primeira vez.
+  final String? preAlbumRelativePath;
+
+  /// 6.5.7 — movimento físico pendente de confirmação em lote.
+  final bool albumMovePending;
   const MediaItemsTableData({
     required this.id,
     required this.mediaStoreId,
@@ -524,6 +585,8 @@ class MediaItemsTableData extends DataClass
     required this.trashedInSystem,
     this.trashedAt,
     required this.isAvailable,
+    this.preAlbumRelativePath,
+    required this.albumMovePending,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -570,6 +633,10 @@ class MediaItemsTableData extends DataClass
       map['trashed_at'] = Variable<DateTime>(trashedAt);
     }
     map['is_available'] = Variable<bool>(isAvailable);
+    if (!nullToAbsent || preAlbumRelativePath != null) {
+      map['pre_album_relative_path'] = Variable<String>(preAlbumRelativePath);
+    }
+    map['album_move_pending'] = Variable<bool>(albumMovePending);
     return map;
   }
 
@@ -605,6 +672,10 @@ class MediaItemsTableData extends DataClass
           ? const Value.absent()
           : Value(trashedAt),
       isAvailable: Value(isAvailable),
+      preAlbumRelativePath: preAlbumRelativePath == null && nullToAbsent
+          ? const Value.absent()
+          : Value(preAlbumRelativePath),
+      albumMovePending: Value(albumMovePending),
     );
   }
 
@@ -634,6 +705,10 @@ class MediaItemsTableData extends DataClass
       trashedInSystem: serializer.fromJson<bool>(json['trashedInSystem']),
       trashedAt: serializer.fromJson<DateTime?>(json['trashedAt']),
       isAvailable: serializer.fromJson<bool>(json['isAvailable']),
+      preAlbumRelativePath: serializer.fromJson<String?>(
+        json['preAlbumRelativePath'],
+      ),
+      albumMovePending: serializer.fromJson<bool>(json['albumMovePending']),
     );
   }
   @override
@@ -658,6 +733,8 @@ class MediaItemsTableData extends DataClass
       'trashedInSystem': serializer.toJson<bool>(trashedInSystem),
       'trashedAt': serializer.toJson<DateTime?>(trashedAt),
       'isAvailable': serializer.toJson<bool>(isAvailable),
+      'preAlbumRelativePath': serializer.toJson<String?>(preAlbumRelativePath),
+      'albumMovePending': serializer.toJson<bool>(albumMovePending),
     };
   }
 
@@ -680,6 +757,8 @@ class MediaItemsTableData extends DataClass
     bool? trashedInSystem,
     Value<DateTime?> trashedAt = const Value.absent(),
     bool? isAvailable,
+    Value<String?> preAlbumRelativePath = const Value.absent(),
+    bool? albumMovePending,
   }) => MediaItemsTableData(
     id: id ?? this.id,
     mediaStoreId: mediaStoreId ?? this.mediaStoreId,
@@ -703,6 +782,10 @@ class MediaItemsTableData extends DataClass
     trashedInSystem: trashedInSystem ?? this.trashedInSystem,
     trashedAt: trashedAt.present ? trashedAt.value : this.trashedAt,
     isAvailable: isAvailable ?? this.isAvailable,
+    preAlbumRelativePath: preAlbumRelativePath.present
+        ? preAlbumRelativePath.value
+        : this.preAlbumRelativePath,
+    albumMovePending: albumMovePending ?? this.albumMovePending,
   );
   MediaItemsTableData copyWithCompanion(MediaItemsTableCompanion data) {
     return MediaItemsTableData(
@@ -742,6 +825,12 @@ class MediaItemsTableData extends DataClass
       isAvailable: data.isAvailable.present
           ? data.isAvailable.value
           : this.isAvailable,
+      preAlbumRelativePath: data.preAlbumRelativePath.present
+          ? data.preAlbumRelativePath.value
+          : this.preAlbumRelativePath,
+      albumMovePending: data.albumMovePending.present
+          ? data.albumMovePending.value
+          : this.albumMovePending,
     );
   }
 
@@ -765,7 +854,9 @@ class MediaItemsTableData extends DataClass
           ..write('preQueueAlbumId: $preQueueAlbumId, ')
           ..write('trashedInSystem: $trashedInSystem, ')
           ..write('trashedAt: $trashedAt, ')
-          ..write('isAvailable: $isAvailable')
+          ..write('isAvailable: $isAvailable, ')
+          ..write('preAlbumRelativePath: $preAlbumRelativePath, ')
+          ..write('albumMovePending: $albumMovePending')
           ..write(')'))
         .toString();
   }
@@ -790,6 +881,8 @@ class MediaItemsTableData extends DataClass
     trashedInSystem,
     trashedAt,
     isAvailable,
+    preAlbumRelativePath,
+    albumMovePending,
   );
   @override
   bool operator ==(Object other) =>
@@ -812,7 +905,9 @@ class MediaItemsTableData extends DataClass
           other.preQueueAlbumId == this.preQueueAlbumId &&
           other.trashedInSystem == this.trashedInSystem &&
           other.trashedAt == this.trashedAt &&
-          other.isAvailable == this.isAvailable);
+          other.isAvailable == this.isAvailable &&
+          other.preAlbumRelativePath == this.preAlbumRelativePath &&
+          other.albumMovePending == this.albumMovePending);
 }
 
 class MediaItemsTableCompanion extends UpdateCompanion<MediaItemsTableData> {
@@ -834,6 +929,8 @@ class MediaItemsTableCompanion extends UpdateCompanion<MediaItemsTableData> {
   final Value<bool> trashedInSystem;
   final Value<DateTime?> trashedAt;
   final Value<bool> isAvailable;
+  final Value<String?> preAlbumRelativePath;
+  final Value<bool> albumMovePending;
   final Value<int> rowid;
   const MediaItemsTableCompanion({
     this.id = const Value.absent(),
@@ -854,6 +951,8 @@ class MediaItemsTableCompanion extends UpdateCompanion<MediaItemsTableData> {
     this.trashedInSystem = const Value.absent(),
     this.trashedAt = const Value.absent(),
     this.isAvailable = const Value.absent(),
+    this.preAlbumRelativePath = const Value.absent(),
+    this.albumMovePending = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   MediaItemsTableCompanion.insert({
@@ -875,6 +974,8 @@ class MediaItemsTableCompanion extends UpdateCompanion<MediaItemsTableData> {
     this.trashedInSystem = const Value.absent(),
     this.trashedAt = const Value.absent(),
     this.isAvailable = const Value.absent(),
+    this.preAlbumRelativePath = const Value.absent(),
+    this.albumMovePending = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        mediaStoreId = Value(mediaStoreId),
@@ -905,6 +1006,8 @@ class MediaItemsTableCompanion extends UpdateCompanion<MediaItemsTableData> {
     Expression<bool>? trashedInSystem,
     Expression<DateTime>? trashedAt,
     Expression<bool>? isAvailable,
+    Expression<String>? preAlbumRelativePath,
+    Expression<bool>? albumMovePending,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -926,6 +1029,9 @@ class MediaItemsTableCompanion extends UpdateCompanion<MediaItemsTableData> {
       if (trashedInSystem != null) 'trashed_in_system': trashedInSystem,
       if (trashedAt != null) 'trashed_at': trashedAt,
       if (isAvailable != null) 'is_available': isAvailable,
+      if (preAlbumRelativePath != null)
+        'pre_album_relative_path': preAlbumRelativePath,
+      if (albumMovePending != null) 'album_move_pending': albumMovePending,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -949,6 +1055,8 @@ class MediaItemsTableCompanion extends UpdateCompanion<MediaItemsTableData> {
     Value<bool>? trashedInSystem,
     Value<DateTime?>? trashedAt,
     Value<bool>? isAvailable,
+    Value<String?>? preAlbumRelativePath,
+    Value<bool>? albumMovePending,
     Value<int>? rowid,
   }) {
     return MediaItemsTableCompanion(
@@ -970,6 +1078,8 @@ class MediaItemsTableCompanion extends UpdateCompanion<MediaItemsTableData> {
       trashedInSystem: trashedInSystem ?? this.trashedInSystem,
       trashedAt: trashedAt ?? this.trashedAt,
       isAvailable: isAvailable ?? this.isAvailable,
+      preAlbumRelativePath: preAlbumRelativePath ?? this.preAlbumRelativePath,
+      albumMovePending: albumMovePending ?? this.albumMovePending,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -1039,6 +1149,14 @@ class MediaItemsTableCompanion extends UpdateCompanion<MediaItemsTableData> {
     if (isAvailable.present) {
       map['is_available'] = Variable<bool>(isAvailable.value);
     }
+    if (preAlbumRelativePath.present) {
+      map['pre_album_relative_path'] = Variable<String>(
+        preAlbumRelativePath.value,
+      );
+    }
+    if (albumMovePending.present) {
+      map['album_move_pending'] = Variable<bool>(albumMovePending.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -1066,6 +1184,8 @@ class MediaItemsTableCompanion extends UpdateCompanion<MediaItemsTableData> {
           ..write('trashedInSystem: $trashedInSystem, ')
           ..write('trashedAt: $trashedAt, ')
           ..write('isAvailable: $isAvailable, ')
+          ..write('preAlbumRelativePath: $preAlbumRelativePath, ')
+          ..write('albumMovePending: $albumMovePending, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -1673,6 +1793,8 @@ typedef $$MediaItemsTableTableCreateCompanionBuilder =
       Value<bool> trashedInSystem,
       Value<DateTime?> trashedAt,
       Value<bool> isAvailable,
+      Value<String?> preAlbumRelativePath,
+      Value<bool> albumMovePending,
       Value<int> rowid,
     });
 typedef $$MediaItemsTableTableUpdateCompanionBuilder =
@@ -1695,6 +1817,8 @@ typedef $$MediaItemsTableTableUpdateCompanionBuilder =
       Value<bool> trashedInSystem,
       Value<DateTime?> trashedAt,
       Value<bool> isAvailable,
+      Value<String?> preAlbumRelativePath,
+      Value<bool> albumMovePending,
       Value<int> rowid,
     });
 
@@ -1799,6 +1923,16 @@ class $$MediaItemsTableTableFilterComposer
     column: $table.isAvailable,
     builder: (column) => ColumnFilters(column),
   );
+
+  ColumnFilters<String> get preAlbumRelativePath => $composableBuilder(
+    column: $table.preAlbumRelativePath,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get albumMovePending => $composableBuilder(
+    column: $table.albumMovePending,
+    builder: (column) => ColumnFilters(column),
+  );
 }
 
 class $$MediaItemsTableTableOrderingComposer
@@ -1899,6 +2033,16 @@ class $$MediaItemsTableTableOrderingComposer
     column: $table.isAvailable,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get preAlbumRelativePath => $composableBuilder(
+    column: $table.preAlbumRelativePath,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get albumMovePending => $composableBuilder(
+    column: $table.albumMovePending,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$MediaItemsTableTableAnnotationComposer
@@ -1982,6 +2126,16 @@ class $$MediaItemsTableTableAnnotationComposer
     column: $table.isAvailable,
     builder: (column) => column,
   );
+
+  GeneratedColumn<String> get preAlbumRelativePath => $composableBuilder(
+    column: $table.preAlbumRelativePath,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get albumMovePending => $composableBuilder(
+    column: $table.albumMovePending,
+    builder: (column) => column,
+  );
 }
 
 class $$MediaItemsTableTableTableManager
@@ -2039,6 +2193,8 @@ class $$MediaItemsTableTableTableManager
                 Value<bool> trashedInSystem = const Value.absent(),
                 Value<DateTime?> trashedAt = const Value.absent(),
                 Value<bool> isAvailable = const Value.absent(),
+                Value<String?> preAlbumRelativePath = const Value.absent(),
+                Value<bool> albumMovePending = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => MediaItemsTableCompanion(
                 id: id,
@@ -2059,6 +2215,8 @@ class $$MediaItemsTableTableTableManager
                 trashedInSystem: trashedInSystem,
                 trashedAt: trashedAt,
                 isAvailable: isAvailable,
+                preAlbumRelativePath: preAlbumRelativePath,
+                albumMovePending: albumMovePending,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -2081,6 +2239,8 @@ class $$MediaItemsTableTableTableManager
                 Value<bool> trashedInSystem = const Value.absent(),
                 Value<DateTime?> trashedAt = const Value.absent(),
                 Value<bool> isAvailable = const Value.absent(),
+                Value<String?> preAlbumRelativePath = const Value.absent(),
+                Value<bool> albumMovePending = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => MediaItemsTableCompanion.insert(
                 id: id,
@@ -2101,6 +2261,8 @@ class $$MediaItemsTableTableTableManager
                 trashedInSystem: trashedInSystem,
                 trashedAt: trashedAt,
                 isAvailable: isAvailable,
+                preAlbumRelativePath: preAlbumRelativePath,
+                albumMovePending: albumMovePending,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
