@@ -223,11 +223,7 @@ class DriftTriageRepository implements TriageRepository {
   @override
   Future<List<AlbumEntity>> albums() async {
     final rows = await _db.select(_db.albumsTable).get();
-    return rows
-        .map(
-          (r) => AlbumEntity(id: r.id, name: r.name, createdAt: r.createdAt),
-        )
-        .toList();
+    return rows.map(_albumToEntity).toList();
   }
 
   @override
@@ -248,6 +244,39 @@ class DriftTriageRepository implements TriageRepository {
           ),
         );
     return album;
+  }
+
+  @override
+  Future<AlbumEntity> importAlbumFromFolder(String relativePath) async {
+    final existing = await albums();
+    final name = _validateAlbumName(_leafFolderName(relativePath), existing);
+
+    final album = AlbumEntity(
+      id: 'album-${DateTime.now().microsecondsSinceEpoch}',
+      name: name,
+      createdAt: DateTime.now(),
+      relativePath: relativePath,
+    );
+    await _db.into(_db.albumsTable).insert(
+          AlbumsTableCompanion.insert(
+            id: album.id,
+            name: album.name,
+            createdAt: album.createdAt,
+            relativePath: Value(album.relativePath),
+          ),
+        );
+    return album;
+  }
+
+  /// Último segmento de um `RELATIVE_PATH` do MediaStore (sempre com
+  /// barra no final, ex.: "DCIM/Camera/" -> "Camera") — nome de exibição
+  /// padrão para um álbum importado (6.5.8).
+  String _leafFolderName(String relativePath) {
+    final trimmed = relativePath.endsWith('/')
+        ? relativePath.substring(0, relativePath.length - 1)
+        : relativePath;
+    final lastSlash = trimmed.lastIndexOf('/');
+    return lastSlash == -1 ? trimmed : trimmed.substring(lastSlash + 1);
   }
 
   @override
@@ -276,7 +305,12 @@ class DriftTriageRepository implements TriageRepository {
           ..where((t) => t.albumId.equals(albumId)))
         .write(const MediaItemsTableCompanion(albumMovePending: Value(true)));
 
-    return AlbumEntity(id: albumId, name: name, createdAt: current.createdAt);
+    return AlbumEntity(
+      id: albumId,
+      name: name,
+      createdAt: current.createdAt,
+      relativePath: current.relativePath,
+    );
   }
 
   @override
@@ -386,6 +420,13 @@ class DriftTriageRepository implements TriageRepository {
   }
 
   // --- Mapeamento entidade <-> linha do Drift ---------------------------
+
+  AlbumEntity _albumToEntity(AlbumsTableData row) => AlbumEntity(
+        id: row.id,
+        name: row.name,
+        createdAt: row.createdAt,
+        relativePath: row.relativePath,
+      );
 
   MediaItemEntity _toEntity(MediaItemsTableData row) => MediaItemEntity(
         id: row.id,

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gallery_triage_app/core/application/providers/albums_provider.dart';
 import 'package:gallery_triage_app/core/application/providers/categories_provider.dart';
+import 'package:gallery_triage_app/core/application/providers/discoverable_albums_provider.dart';
 import 'package:gallery_triage_app/core/domain/entities/album_entity.dart';
 import 'package:gallery_triage_app/core/domain/exceptions/album_name_exception.dart';
 import 'package:gallery_triage_app/core/presentation/widgets/media_placeholder.dart';
@@ -65,6 +66,15 @@ class _AlbumPanelState extends ConsumerState<AlbumPanel> {
     // contagem 0 em vez de travar numa tela de loading.
     final counts = ref.watch(albumItemCountsProvider).value ?? const {};
     final ordered = _ordered(albums, counts);
+    // 6.5.8 — pastas do sistema com mídia que ainda não são um álbum
+    // do app; `.value` nullable também aqui, some da lista até carregar
+    // em vez de bloquear o painel (§7).
+    final discoverable = (ref.watch(discoverableAlbumsProvider).value ?? const [])
+        .where(
+          (f) => _query.isEmpty ||
+              f.name.toLowerCase().contains(_query.toLowerCase()),
+        )
+        .toList();
 
     return SafeArea(
       child: Padding(
@@ -113,6 +123,27 @@ class _AlbumPanelState extends ConsumerState<AlbumPanel> {
                       selected: album.id == widget.currentAlbumId,
                       onTap: () => Navigator.of(context).pop(album.id),
                     ),
+                  // 6.5.8 — pastas já existentes na galeria do sistema,
+                  // ainda não conhecidas pelo app; tocar importa e já
+                  // seleciona, mesmo fluxo de "Criar Álbum".
+                  if (discoverable.isNotEmpty) ...[
+                    const Padding(
+                      padding: EdgeInsets.fromLTRB(16, 12, 16, 4),
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text('Álbuns da galeria do sistema'),
+                      ),
+                    ),
+                    for (final folder in discoverable)
+                      ListTile(
+                        leading: const CircleAvatar(
+                          child: Icon(Icons.folder_outlined),
+                        ),
+                        title: Text(folder.name),
+                        subtitle: Text(folder.relativePath),
+                        onTap: () => _importFolder(context, folder),
+                      ),
+                  ],
                 ],
               ),
             ),
@@ -171,6 +202,31 @@ class _AlbumPanelState extends ConsumerState<AlbumPanel> {
       // chamou showAlbumPanel trata os dois casos (existente ou novo)
       // do mesmo jeito.
       Navigator.of(sheetContext).pop(createdId);
+    }
+  }
+
+  /// 6.5.8 — importa a pasta e já fecha o painel com o id, mesmo
+  /// comportamento de escolher um álbum existente. Colisão de nome
+  /// (`AlbumNameException`, raro — o nome vem do próprio sistema) só
+  /// avisa por SnackBar: não há campo de texto aqui pra corrigir
+  /// inline, diferente de criar/renomear.
+  Future<void> _importFolder(
+    BuildContext sheetContext,
+    DiscoveredFolder folder,
+  ) async {
+    try {
+      final id = await ref
+          .read(albumsProvider.notifier)
+          .importFromFolder(folder.relativePath);
+      if (sheetContext.mounted) {
+        Navigator.of(sheetContext).pop(id);
+      }
+    } on AlbumNameException catch (e) {
+      if (sheetContext.mounted) {
+        ScaffoldMessenger.of(sheetContext).showSnackBar(
+          SnackBar(content: Text(e.message)),
+        );
+      }
     }
   }
 }

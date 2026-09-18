@@ -16,6 +16,11 @@ class AlbumsTable extends Table {
   /// Reservado para os estágios 2 e 3 (1.3.2/1.3.3). Não usado ainda.
   TextColumn get externalRef => text().nullable()();
 
+  /// 6.5.8 — espelha [AlbumEntity.relativePath]: pasta real explícita
+  /// para álbuns importados de uma pasta já existente no sistema.
+  /// `null` nos criados no app, que seguem `Pictures/<nome>/`.
+  TextColumn get relativePath => text().nullable()();
+
   @override
   Set<Column> get primaryKey => {id};
 }

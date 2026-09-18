@@ -22,7 +22,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.connection);
 
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 4;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -48,6 +48,14 @@ class AppDatabase extends _$AppDatabase {
               mediaItemsTable,
               mediaItemsTable.albumMovePending,
             );
+          }
+          // v4 — 6.5.8 (ler álbuns/pastas já existentes no sistema):
+          // `relativePath` em AlbumsTable. `null` em todo álbum já
+          // existente — todos criados no app, seguem a convenção
+          // padrão (`AlbumEntity.effectiveRelativePath`), nunca tiveram
+          // pasta importada.
+          if (from < 4) {
+            await m.addColumn(albumsTable, albumsTable.relativePath);
           }
         },
       );

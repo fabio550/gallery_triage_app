@@ -181,4 +181,17 @@ class PhotoManagerMediaRepository implements MediaRepository {
       return const [];
     }
   }
+
+  @override
+  Future<List<String>> discoverMediaFolders() async {
+    try {
+      final paths = await _nativeChannel.invokeMethod<List<Object?>>(
+        'listMediaFolders',
+      );
+      if (paths == null) return const [];
+      return paths.whereType<String>().toList();
+    } catch (_) {
+      return const [];
+    }
+  }
 }

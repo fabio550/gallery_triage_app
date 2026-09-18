@@ -110,6 +110,17 @@ abstract class TriageRepository {
   /// mover fisicamente pro nome novo no próximo lote confirmado.
   Future<AlbumEntity> renameAlbum(String albumId, String newName);
 
+  /// 6.5.8 — importa uma pasta já existente no sistema (descoberta via
+  /// `MediaRepository.discoverMediaFolders`, ex.: "DCIM/Camera/") como
+  /// álbum selecionável, gravando [relativePath] explícito em vez da
+  /// convenção padrão `Pictures/<nome>/` (6.5.7). O nome exibido é o
+  /// último segmento do caminho (ex.: "Camera"); mesmas regras de nome
+  /// de [createAlbum] (6.5.3) — pode lançar `AlbumNameException` se
+  /// colidir com um álbum já existente. Não vincula nenhum item
+  /// retroativamente: a pasta só passa a ser uma opção de destino,
+  /// igual a qualquer outro álbum.
+  Future<AlbumEntity> importAlbumFromFolder(String relativePath);
+
   /// 6.5.5/6.5.6 — exclui o álbum. Os itens vinculados passam a
   /// `albumId` null, preservando `decision` (mantido não muda). A
   /// contagem de itens afetados (pro diálogo de confirmação) vem de

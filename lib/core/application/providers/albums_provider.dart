@@ -60,6 +60,17 @@ class AlbumsNotifier extends Notifier<List<AlbumEntity>> {
     _invalidateDashboard();
   }
 
+  /// 6.5.8 — importa uma pasta real já existente no sistema (descoberta
+  /// por `discoverableAlbumsProvider`) como álbum selecionável, sem
+  /// vincular nenhum item retroativamente. Retorna o id do álbum
+  /// criado, mesmo papel que [create] cumpre pro fluxo manual.
+  Future<String> importFromFolder(String relativePath) async {
+    final album = await _repository.importAlbumFromFolder(relativePath);
+    state = [...state, album];
+    _invalidateDashboard();
+    return album.id;
+  }
+
   /// Reavalia a lista — usado depois de qualquer escrita feita por
   /// fora deste notifier.
   Future<void> refresh() => _load();

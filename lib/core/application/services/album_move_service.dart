@@ -24,8 +24,6 @@ class AlbumMoveService {
   final MediaRepository _media;
   final TriageRepository _triage;
 
-  static const _albumsRoot = 'Pictures';
-
   /// Só a contagem, pra badges/gatilhos que não precisam da lista.
   Future<int> pendingCount() async {
     final pending = await _triage.itemsPendingAlbumMove();
@@ -56,7 +54,7 @@ class AlbumMoveService {
     }
 
     final albums = await _triage.albums();
-    final albumNameById = {for (final a in albums) a.id: a.name};
+    final albumById = {for (final a in albums) a.id: a};
 
     final movesByMediaStoreId =
         <int, ({String targetRelativePath, bool isVideo})>{};
@@ -66,10 +64,12 @@ class AlbumMoveService {
       // nunca "Pictures/Nome") — sem ela o SO ignora a atualização
       // silenciosamente (nem lança erro, só devolve 0 linhas afetadas,
       // reportado aqui como falha do item). preAlbumRelativePath já
-      // vem assim (lido de RELATIVE_PATH de verdade pelo scan); só o
-      // caminho montado à mão pro álbum precisava da barra.
+      // vem assim (lido de RELATIVE_PATH de verdade pelo scan);
+      // [AlbumEntity.effectiveRelativePath] já devolve a pasta com
+      // barra no final, tanto pra convenção padrão quanto pra álbum
+      // importado de uma pasta existente (6.5.8).
       final target = item.albumId != null
-          ? '$_albumsRoot/${albumNameById[item.albumId] ?? item.albumId}/'
+          ? albumById[item.albumId]?.effectiveRelativePath
           : item.preAlbumRelativePath;
       // Defensivo (§7): item pendente sem álbum e sem origem gravada
       // não deveria existir (assignToAlbum sempre grava a origem antes

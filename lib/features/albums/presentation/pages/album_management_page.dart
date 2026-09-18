@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gallery_triage_app/core/application/providers/albums_provider.dart';
 import 'package:gallery_triage_app/core/application/providers/categories_provider.dart';
+import 'package:gallery_triage_app/core/application/providers/discoverable_albums_provider.dart';
 import 'package:gallery_triage_app/core/domain/entities/album_entity.dart';
 import 'package:gallery_triage_app/core/domain/exceptions/album_name_exception.dart';
 
@@ -18,6 +19,10 @@ class AlbumManagementPage extends ConsumerWidget {
     // Riverpod 3.x: `.value` já é nullable (equivalente ao antigo
     // `valueOrNull`) — enquanto carrega, mostra 0 em vez de travar.
     final counts = ref.watch(albumItemCountsProvider).value ?? const {};
+    // 6.5.8 — pastas do sistema com mídia ainda não conhecidas pelo
+    // app; `.value` nullable também aqui, some da lista até carregar.
+    final discoverable =
+        ref.watch(discoverableAlbumsProvider).value ?? const [];
 
     // Ordem alfabética — mesma convenção da lista de álbuns vazios do
     // painel de triagem (6.2.16); aqui não há distinção por contagem,
@@ -35,39 +40,81 @@ class AlbumManagementPage extends ConsumerWidget {
           ),
         ],
       ),
-      body: sorted.isEmpty
+      body: sorted.isEmpty && discoverable.isEmpty
           ? const _EmptyState()
-          : ListView.separated(
-              itemCount: sorted.length,
-              separatorBuilder: (context, index) => const Divider(height: 1),
-              itemBuilder: (context, index) {
-                final album = sorted[index];
-                final count = counts[album.id] ?? 0;
-                return ListTile(
-                  title: Text(album.name),
-                  subtitle: Text(
-                    count == 1 ? '1 item' : '$count itens',
+          : ListView(
+              children: [
+                for (final album in sorted)
+                  _albumTile(context, ref, album, counts[album.id] ?? 0),
+                if (discoverable.isNotEmpty) ...[
+                  const Padding(
+                    padding: EdgeInsets.fromLTRB(16, 16, 16, 4),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text('Álbuns da galeria do sistema'),
+                    ),
                   ),
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      IconButton(
-                        tooltip: 'Renomear',
-                        icon: const Icon(Icons.edit_outlined),
-                        onPressed: () => _renameAlbum(context, ref, album),
+                  for (final folder in discoverable)
+                    ListTile(
+                      leading: const Icon(Icons.folder_outlined),
+                      title: Text(folder.name),
+                      subtitle: Text(folder.relativePath),
+                      trailing: TextButton(
+                        onPressed: () => _importFolder(context, ref, folder),
+                        child: const Text('Importar'),
                       ),
-                      IconButton(
-                        tooltip: 'Excluir',
-                        icon: const Icon(Icons.delete_outline),
-                        onPressed: () =>
-                            _deleteAlbum(context, ref, album, count),
-                      ),
-                    ],
-                  ),
-                );
-              },
+                    ),
+                ],
+              ],
             ),
     );
+  }
+
+  Widget _albumTile(
+    BuildContext context,
+    WidgetRef ref,
+    AlbumEntity album,
+    int count,
+  ) {
+    return ListTile(
+      title: Text(album.name),
+      subtitle: Text(count == 1 ? '1 item' : '$count itens'),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          IconButton(
+            tooltip: 'Renomear',
+            icon: const Icon(Icons.edit_outlined),
+            onPressed: () => _renameAlbum(context, ref, album),
+          ),
+          IconButton(
+            tooltip: 'Excluir',
+            icon: const Icon(Icons.delete_outline),
+            onPressed: () => _deleteAlbum(context, ref, album, count),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 6.5.8 — importa sem diálogo (o nome vem do próprio sistema, não
+  /// há o que digitar); colisão de nome (`AlbumNameException`, raro)
+  /// só avisa por SnackBar, sem campo pra corrigir inline.
+  Future<void> _importFolder(
+    BuildContext context,
+    WidgetRef ref,
+    DiscoveredFolder folder,
+  ) async {
+    try {
+      await ref.read(albumsProvider.notifier).importFromFolder(
+            folder.relativePath,
+          );
+    } on AlbumNameException catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(e.message)));
+      }
+    }
   }
 
   Future<void> _createAlbum(BuildContext context, WidgetRef ref) {

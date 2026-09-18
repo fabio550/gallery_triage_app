@@ -75,4 +75,13 @@ abstract class MediaRepository {
   Future<List<int>> moveAssetsToPaths(
     Map<int, ({String targetRelativePath, bool isVideo})> movesByMediaStoreId,
   );
+
+  /// 6.5.8 — todo `RELATIVE_PATH` distinto que já tem pelo menos um
+  /// item de mídia agora (Câmera, WhatsApp Images, pastas de outro
+  /// app etc.), via canal nativo. Mesma convenção usada pelas galerias
+  /// do sistema: pasta vazia não é "álbum" — não há como distinguir
+  /// uma pasta vazia de verdade de uma que nunca existiu no MediaStore
+  /// (não é uma entidade própria, só um valor de coluna compartilhado
+  /// entre arquivos). Lista vazia se o canal falhar — nunca exceção.
+  Future<List<String>> discoverMediaFolders();
 }

@@ -30,6 +30,10 @@ import io.flutter.plugin.common.MethodChannel
  *   dos panos (`createWriteRequest` + `startIntentSenderForResult`),
  *   só que pedindo a concessão pra todos os URIs de uma vez, não
  *   importa quantos destinos diferentes eles têm.
+ * - 6.5.8 — pastas reais já existentes com mídia (Câmera, WhatsApp
+ *   Images etc.), pra oferecer como álbum importável. `photo_manager`
+ *   agrupa por `bucket_id`, não expõe o `RELATIVE_PATH` cru usado pela
+ *   convenção de pasta de álbum deste app (6.5.7).
  *
  * `minSdk` já é 30 (4.1.1): `QUERY_ARG_MATCH_TRASHED`, `IS_TRASHED` e
  * `createWriteRequest` estão sempre disponíveis, sem checagem de
@@ -46,6 +50,7 @@ class MainActivity : FlutterActivity() {
                 when (call.method) {
                     "getTrashedMediaStoreIds" -> result.success(trashedMediaStoreIds())
                     "moveAssetsToPaths" -> handleMoveAssetsToPaths(call, result)
+                    "listMediaFolders" -> result.success(mediaFolders())
                     else -> result.notImplemented()
                 }
             }
@@ -81,6 +86,37 @@ class MainActivity : FlutterActivity() {
             }
         }
         return ids
+    }
+
+    /**
+     * 6.5.8 — todo `RELATIVE_PATH` distinto com pelo menos um item de
+     * mídia agora (Câmera, WhatsApp Images, pastas de outro app etc.).
+     * Sem `DISTINCT` na consulta em si (a API de `ContentResolver` não
+     * garante suporte a isso entre versões) — dedupe em memória com um
+     * `Set`, custo aceitável mesmo com dezenas de milhares de linhas
+     * porque só a coluna de caminho é projetada.
+     */
+    private fun mediaFolders(): List<String> {
+        val uri = MediaStore.Files.getContentUri(MediaStore.VOLUME_EXTERNAL)
+        val projection = arrayOf(MediaStore.Files.FileColumns.RELATIVE_PATH)
+        val selection =
+            "${MediaStore.Files.FileColumns.MEDIA_TYPE} = ? OR " +
+                "${MediaStore.Files.FileColumns.MEDIA_TYPE} = ?"
+        val selectionArgs = arrayOf(
+            MediaStore.Files.FileColumns.MEDIA_TYPE_IMAGE.toString(),
+            MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO.toString(),
+        )
+
+        val paths = sortedSetOf<String>()
+        contentResolver.query(uri, projection, selection, selectionArgs, null)?.use { cursor ->
+            val pathColumn =
+                cursor.getColumnIndexOrThrow(MediaStore.Files.FileColumns.RELATIVE_PATH)
+            while (cursor.moveToNext()) {
+                val path = cursor.getString(pathColumn)
+                if (!path.isNullOrBlank()) paths.add(path)
+            }
+        }
+        return paths.toList()
     }
 
     @Suppress("UNCHECKED_CAST")
