@@ -7,6 +7,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.provider.MediaStore
+import android.util.Log
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodCall
@@ -120,6 +121,7 @@ class MainActivity : FlutterActivity() {
                 0,
             )
         } catch (e: Exception) {
+            Log.e(TAG, "createWriteRequest falhou pro lote de movimento de álbum", e)
             pendingMoveResult = null
             pendingMoveTargets = null
             result.success(emptyList<Long>())
@@ -139,6 +141,7 @@ class MainActivity : FlutterActivity() {
             if (resultCode == RESULT_OK && targets != null) {
                 callback?.success(applyMoves(targets))
             } else {
+                Log.w(TAG, "Diálogo de movimento de álbum não aprovado (resultCode=$resultCode)")
                 callback?.success(emptyList<Long>())
             }
             return
@@ -160,17 +163,26 @@ class MainActivity : FlutterActivity() {
         for ((uri, path) in targets) {
             values.clear()
             values.put(MediaStore.MediaColumns.RELATIVE_PATH, path)
-            val updated = try {
-                contentResolver.update(uri, values, null, null) > 0
+            val rows = try {
+                contentResolver.update(uri, values, null, null)
             } catch (e: Exception) {
-                false
+                Log.e(TAG, "update falhou pra $uri -> \"$path\"", e)
+                0
             }
-            if (updated) moved.add(ContentUris.parseId(uri))
+            if (rows > 0) {
+                moved.add(ContentUris.parseId(uri))
+            } else {
+                // Sem exceção, mas 0 linhas afetadas: RELATIVE_PATH mal
+                // formado (sem barra no final, ex.) faz o MediaStore
+                // ignorar o pedido silenciosamente em vez de lançar.
+                Log.w(TAG, "update não moveu $uri -> \"$path\" (0 linhas afetadas)")
+            }
         }
         return moved
     }
 
     private companion object {
+        const val TAG = "GalleryTriageMediaNative"
         const val CHANNEL = "gallery_triage_app/media_native"
         const val MOVE_REQUEST_CODE = 40987
     }

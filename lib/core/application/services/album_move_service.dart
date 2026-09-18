@@ -61,8 +61,14 @@ class AlbumMoveService {
     final targetByMediaStoreId = <int, String>{};
     final itemByMediaStoreId = <int, MediaItemEntity>{};
     for (final item in pending) {
+      // MediaStore.RELATIVE_PATH exige barra no final ("Pictures/Nome/",
+      // nunca "Pictures/Nome") — sem ela o SO ignora a atualização
+      // silenciosamente (nem lança erro, só devolve 0 linhas afetadas,
+      // reportado aqui como falha do item). preAlbumRelativePath já
+      // vem assim (lido de RELATIVE_PATH de verdade pelo scan); só o
+      // caminho montado à mão pro álbum precisava da barra.
       final target = item.albumId != null
-          ? '$_albumsRoot/${albumNameById[item.albumId] ?? item.albumId}'
+          ? '$_albumsRoot/${albumNameById[item.albumId] ?? item.albumId}/'
           : item.preAlbumRelativePath;
       // Defensivo (§7): item pendente sem álbum e sem origem gravada
       // não deveria existir (assignToAlbum sempre grava a origem antes
