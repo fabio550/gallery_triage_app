@@ -155,18 +155,19 @@ class PhotoManagerMediaRepository implements MediaRepository {
 
   @override
   Future<List<int>> moveAssetsToPaths(
-    Map<int, String> targetRelativePathByMediaStoreId,
+    Map<int, ({String targetRelativePath, bool isVideo})> movesByMediaStoreId,
   ) async {
-    if (targetRelativePathByMediaStoreId.isEmpty) return const [];
+    if (movesByMediaStoreId.isEmpty) return const [];
     try {
       final moved = await _nativeChannel.invokeMethod<List<Object?>>(
         'moveAssetsToPaths',
         {
           'moves': [
-            for (final entry in targetRelativePathByMediaStoreId.entries)
+            for (final entry in movesByMediaStoreId.entries)
               {
                 'mediaStoreId': entry.key,
-                'targetRelativePath': entry.value,
+                'targetRelativePath': entry.value.targetRelativePath,
+                'isVideo': entry.value.isVideo,
               },
           ],
         },

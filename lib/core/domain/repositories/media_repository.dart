@@ -66,7 +66,13 @@ abstract class MediaRepository {
   /// só os `mediaStoreId` efetivamente movidos (§7) — `RESULT_CANCELED`
   /// do diálogo, ou qualquer falha, devolve lista vazia; os itens
   /// continuam pendentes do lado de quem chama.
+  ///
+  /// `isVideo` por item é necessário porque `createWriteRequest` exige
+  /// a URI da coleção certa (`Images`/`Video`) — a URI genérica de
+  /// `Files` (usada pra consulta/lixeira) é rejeitada por ele com
+  /// `IllegalArgumentException: All requested items must be Media
+  /// items`, mesmo apontando pra mesma linha.
   Future<List<int>> moveAssetsToPaths(
-    Map<int, String> targetRelativePathByMediaStoreId,
+    Map<int, ({String targetRelativePath, bool isVideo})> movesByMediaStoreId,
   );
 }

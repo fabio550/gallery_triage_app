@@ -58,7 +58,8 @@ class AlbumMoveService {
     final albums = await _triage.albums();
     final albumNameById = {for (final a in albums) a.id: a.name};
 
-    final targetByMediaStoreId = <int, String>{};
+    final movesByMediaStoreId =
+        <int, ({String targetRelativePath, bool isVideo})>{};
     final itemByMediaStoreId = <int, MediaItemEntity>{};
     for (final item in pending) {
       // MediaStore.RELATIVE_PATH exige barra no final ("Pictures/Nome/",
@@ -74,20 +75,21 @@ class AlbumMoveService {
       // não deveria existir (assignToAlbum sempre grava a origem antes
       // de marcar pendente), mas sem alvo não há o que mover.
       if (target == null) continue;
-      targetByMediaStoreId[item.mediaStoreId] = target;
+      movesByMediaStoreId[item.mediaStoreId] =
+          (targetRelativePath: target, isVideo: item.isVideo);
       itemByMediaStoreId[item.mediaStoreId] = item;
     }
 
-    if (targetByMediaStoreId.isEmpty) {
+    if (movesByMediaStoreId.isEmpty) {
       return const AlbumMoveResult(movedCount: 0, failedCount: 0);
     }
 
-    final movedIds = await _media.moveAssetsToPaths(targetByMediaStoreId);
+    final movedIds = await _media.moveAssetsToPaths(movesByMediaStoreId);
 
     final succeeded = <MediaItemEntity>[];
     for (final id in movedIds) {
       final item = itemByMediaStoreId[id];
-      final target = targetByMediaStoreId[id];
+      final target = movesByMediaStoreId[id]?.targetRelativePath;
       if (item != null && target != null) {
         succeeded.add(item.applyAlbumMove(target));
       }
@@ -99,7 +101,7 @@ class AlbumMoveService {
 
     return AlbumMoveResult(
       movedCount: succeeded.length,
-      failedCount: targetByMediaStoreId.length - succeeded.length,
+      failedCount: movesByMediaStoreId.length - succeeded.length,
     );
   }
 }

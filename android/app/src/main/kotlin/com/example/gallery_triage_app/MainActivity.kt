@@ -95,11 +95,18 @@ class MainActivity : FlutterActivity() {
             return
         }
 
-        val filesUri = MediaStore.Files.getContentUri(MediaStore.VOLUME_EXTERNAL)
+        // `createWriteRequest` rejeita URIs da coleção genérica `Files`
+        // ("All requested items must be Media items") — exige a coleção
+        // específica (`Images`/`Video`), mesmo apontando pra mesma linha
+        // que a consulta de lixeira (acima) lê via `Files` sem problema.
+        val imagesUri = MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL)
+        val videoUri = MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL)
         val targets = moves.associate { move ->
             val id = (move["mediaStoreId"] as Number).toLong()
             val path = move["targetRelativePath"] as String
-            ContentUris.withAppendedId(filesUri, id) to path
+            val isVideo = move["isVideo"] as? Boolean ?: false
+            val collectionUri = if (isVideo) videoUri else imagesUri
+            ContentUris.withAppendedId(collectionUri, id) to path
         }
 
         // Só um diálogo por lote, não importa quantos destinos
