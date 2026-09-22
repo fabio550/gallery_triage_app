@@ -83,7 +83,11 @@ class SyncService {
   /// na lixeira (2.1.5) já existe — usado abaixo pra reconciliar
   /// `trashedInSystem` com o estado real do MediaStore, inclusive o
   /// que foi retido/purgado por fora deste app.
-  Future<void> runIncrementalSync() async {
+  /// Retorna quantos itens novos foram indexados nesta rodada — usado
+  /// pelo chamador pra saber se precisa invalidar sessões de triagem já
+  /// abertas (o cursor delas só deve pular pra mídia mais nova quando
+  /// mídia nova de fato chegou, não a cada sync sem novidade).
+  Future<int> runIncrementalSync() async {
     await _media.ensureReady();
 
     final existingIds = await _triage.indexedMediaStoreIds();
@@ -100,6 +104,7 @@ class SyncService {
     // 3.6.3/5.5.5 — retido que reaparece na varredura foi restaurado
     // pelo usuário na lixeira do sistema, não é item novo.
     final reappearedTrashed = <int>{};
+    var newCount = 0;
 
     await for (final batch in _media.scanBatches(batchSize: _batchSize)) {
       for (final asset in batch) {
@@ -115,6 +120,7 @@ class SyncService {
       );
       if (entities.isNotEmpty) {
         await _triage.upsertScanned(entities);
+        newCount += entities.length;
       }
     }
 
@@ -174,6 +180,7 @@ class SyncService {
     // retidos — gap isolado, independente do canal nativo de lixeira
     // (2.1.5, já usado acima).
     await _bumpLastSync();
+    return newCount;
   }
 
   Future<List<MediaItemEntity>> _buildNewEntities(

@@ -75,7 +75,7 @@ class TriageSessionNotifier extends Notifier<TriageSessionState> {
     );
     if (!ref.mounted) return;
 
-    final initialIndex = await _resolveInitialIndex(items);
+    final initialIndex = await _resolveInitialIndex(items, sortOrder);
     if (!ref.mounted) return;
 
     state = state.copyWith(
@@ -100,13 +100,30 @@ class TriageSessionNotifier extends Notifier<TriageSessionState> {
   /// persistida por ID do item. Se o item não existir mais nesta lista,
   /// ou não houver posição salva: primeiro item não decidido; sem
   /// nenhum, primeiro item.
-  Future<int> _resolveInitialIndex(List<MediaItemEntity> items) async {
+  ///
+  /// Exceção: se fotos mais recentes que a posição salva já estão na
+  /// lista (chegaram por sincronização depois da última visita), o
+  /// cursor não retoma de onde parou — aponta pra mais nova, senão elas
+  /// ficariam escondidas atrás da posição antiga.
+  Future<int> _resolveInitialIndex(
+    List<MediaItemEntity> items,
+    SortOrder sortOrder,
+  ) async {
     if (items.isEmpty) return 0;
+
+    final newestIndex = sortOrder == SortOrder.newestFirst
+        ? 0
+        : items.length - 1;
 
     final savedId = await _preferencesRepository.cursorPosition(_categoryRef);
     if (savedId != null) {
       final savedIndex = items.indexWhere((i) => i.id == savedId);
-      if (savedIndex != -1) return savedIndex;
+      if (savedIndex != -1) {
+        final newest = items[newestIndex];
+        final saved = items[savedIndex];
+        if (newest.dateTaken.isAfter(saved.dateTaken)) return newestIndex;
+        return savedIndex;
+      }
     }
 
     final firstUndecided =

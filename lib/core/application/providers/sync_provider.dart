@@ -1,10 +1,12 @@
 import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:gallery_triage_app/core/application/providers/categories_provider.dart';
 import 'package:gallery_triage_app/core/application/providers/preferences_repository_provider.dart';
 import 'package:gallery_triage_app/core/application/providers/sync_service_provider.dart';
 import 'package:gallery_triage_app/core/application/providers/triage_repository_provider.dart';
 import 'package:gallery_triage_app/core/application/services/sync_status.dart';
+import 'package:gallery_triage_app/features/triage/application/triage_session_notifier.dart';
 
 final syncProvider = NotifierProvider<SyncNotifier, SyncStatus>(
   SyncNotifier.new,
@@ -69,7 +71,17 @@ class SyncNotifier extends Notifier<SyncStatus> {
 
   Future<void> _runIncrementalSync() async {
     try {
-      await _service.runIncrementalSync();
+      final newCount = await _service.runIncrementalSync();
+      if (!ref.mounted || newCount == 0) return;
+
+      // Mídia nova entrou no índice: contagens do Dashboard e sessões
+      // de triagem já abertas (que sobrevivem entre visitas, 6.2.4)
+      // ficaram desatualizadas — invalida pra recarregar do Drift. O
+      // recarregamento em si é quem decide pular o cursor pra mídia
+      // mais nova (`TriageSessionNotifier._resolveInitialIndex`).
+      ref.invalidate(categoriesProvider);
+      ref.invalidate(albumItemCountsProvider);
+      ref.invalidate(triageSessionProvider);
     } catch (_) {
       // 5.3.5 — não bloqueante; uma falha aqui não pode tirar o
       // usuário do que já está indexado. Sem tela de erro dedicada
