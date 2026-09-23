@@ -81,7 +81,8 @@ class DriftTriageRepository implements TriageRepository {
     if (album == null) return _categoryPredicate(ref);
 
     final path = album.effectiveRelativePath;
-    return (t) => t.albumId.equals(ref.key) | t.relativePath.equals(path);
+    return ($MediaItemsTableTable t) =>
+        t.albumId.equals(ref.key) | t.relativePath.equals(path);
   }
 
   @override
