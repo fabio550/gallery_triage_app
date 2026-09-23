@@ -30,37 +30,66 @@ class TriageActionBar extends StatelessWidget {
     final colors = Theme.of(context).colorScheme;
     final triageColors = context.triageColors;
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          _ActionButton(
-            icon: Icons.delete_outline,
-            label: 'Excluir',
-            color: triageColors.stateMarkedForDeletion,
-            onTap: onDelete,
-          ),
-          if (isVideo)
-            _ActionButton(
-              icon: isPlaying ? Icons.pause : Icons.play_arrow,
-              label: isPlaying ? 'Pausar' : 'Reproduzir',
-              color: colors.onSurfaceVariant,
-              onTap: onTogglePlay ?? () {},
+    return DecoratedBox(
+      // Véu em degradê atrás de toda a barra, não um fundo por botão:
+      // garante contraste uniforme contra qualquer foto sem depender
+      // da cor de cada ícone, e ainda deixa a foto transparecer perto
+      // do topo em vez de tapar tudo atrás dos botões.
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            Colors.black.withValues(alpha: 0),
+            Colors.black.withValues(alpha: 0.7),
+          ],
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 28, 12, 12),
+        child: Row(
+          // Cada botão dentro de Expanded: divide o espaço disponível
+          // em partes iguais e nunca deixa o texto do rótulo (varia de
+          // "Pular" a "Reproduzir") estourar a largura da tela --
+          // antes cada botão só pedia sua largura natural, e a soma
+          // dos quatro passava do limite em telas estreitas
+          // ("RIGHT OVERFLOWED").
+          children: [
+            Expanded(
+              child: _ActionButton(
+                icon: Icons.delete_outline,
+                label: 'Excluir',
+                color: triageColors.stateMarkedForDeletion,
+                onTap: onDelete,
+              ),
             ),
-          _ActionButton(
-            icon: Icons.skip_next_outlined,
-            label: 'Pular',
-            color: colors.onSurfaceVariant,
-            onTap: onSkip,
-          ),
-          _ActionButton(
-            icon: Icons.check,
-            label: 'Manter',
-            color: triageColors.stateKept,
-            onTap: onKeep,
-          ),
-        ],
+            if (isVideo)
+              Expanded(
+                child: _ActionButton(
+                  icon: isPlaying ? Icons.pause : Icons.play_arrow,
+                  label: isPlaying ? 'Pausar' : 'Reproduzir',
+                  color: colors.onSurfaceVariant,
+                  onTap: onTogglePlay ?? () {},
+                ),
+              ),
+            Expanded(
+              child: _ActionButton(
+                icon: Icons.skip_next_outlined,
+                label: 'Pular',
+                color: colors.onSurfaceVariant,
+                onTap: onSkip,
+              ),
+            ),
+            Expanded(
+              child: _ActionButton(
+                icon: Icons.check,
+                label: 'Manter',
+                color: triageColors.stateKept,
+                onTap: onKeep,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -86,44 +115,44 @@ class _ActionButton extends StatelessWidget {
     return InkWell(
       onTap: onTap,
       customBorder: const CircleBorder(),
-      child: Padding(
-        padding: const EdgeInsets.all(8),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 56,
-              height: 56,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                // Fundo escuro translúcido — mesmo tratamento dos
-                // botões flutuantes de desfazer/informações
-                // (`_CardOverlayButton`) — em vez do preenchimento
-                // colorido de baixa opacidade de antes. Aquele dependia
-                // da cor da própria foto por trás pra ter contraste, e
-                // sumia em fotos muito claras ou já na mesma cor do
-                // botão. Preto translúcido garante contraste com
-                // qualquer foto; a cor semântica (excluir/manter)
-                // continua viva no ícone e na borda.
-                color: Colors.black.withValues(alpha: 0.6),
-                border: Border.all(color: color, width: 2),
-              ),
-              child: Icon(icon, color: color, size: 26),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 52,
+            height: 52,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              // Preenchimento sólido na cor semântica (não mais um
+              // contorno fino sobre fundo translúcido): já sentado
+              // sobre o véu escuro da barra, a cor de cada ação salta
+              // aos olhos sem depender de mais nenhuma camada.
+              color: color,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.35),
+                  blurRadius: 6,
+                  offset: const Offset(0, 2),
+                ),
+              ],
             ),
-            const SizedBox(height: 6),
-            DecoratedBox(
-              decoration: BoxDecoration(
-                color: Colors.black.withValues(alpha: 0.6),
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                child: Text(label, style: text.labelSmall?.copyWith(color: color)),
-              ),
+            child: Icon(icon, color: Colors.white, size: 26),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: text.labelSmall?.copyWith(
+              color: Colors.white,
+              fontWeight: FontWeight.w600,
+              shadows: const [
+                Shadow(color: Colors.black87, blurRadius: 4),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
