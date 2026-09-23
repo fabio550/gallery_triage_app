@@ -96,13 +96,32 @@ class _ActionButton extends StatelessWidget {
               height: 56,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: color.withValues(alpha: 0.14),
-                border: Border.all(color: color, width: 1.5),
+                // Fundo escuro translúcido — mesmo tratamento dos
+                // botões flutuantes de desfazer/informações
+                // (`_CardOverlayButton`) — em vez do preenchimento
+                // colorido de baixa opacidade de antes. Aquele dependia
+                // da cor da própria foto por trás pra ter contraste, e
+                // sumia em fotos muito claras ou já na mesma cor do
+                // botão. Preto translúcido garante contraste com
+                // qualquer foto; a cor semântica (excluir/manter)
+                // continua viva no ícone e na borda.
+                color: Colors.black.withValues(alpha: 0.6),
+                border: Border.all(color: color, width: 2),
               ),
               child: Icon(icon, color: color, size: 26),
             ),
             const SizedBox(height: 6),
-            Text(label, style: text.labelSmall?.copyWith(color: color)),
+            DecoratedBox(
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: 0.6),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                child: Text(label, style: text.labelSmall?.copyWith(color: color)),
+              ),
+            ),
           ],
         ),
       ),
