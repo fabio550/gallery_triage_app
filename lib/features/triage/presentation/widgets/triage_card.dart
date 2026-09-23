@@ -28,13 +28,7 @@ class TriageCard extends StatefulWidget {
   /// swipe para cima. Nulo = pílula não renderizada e gesto inerte.
   final String? lastUsedAlbumLabel;
 
-  /// 6.2.17 — repassado ao `MediaCard` do item ativo só; nunca ao
-  /// `behind`.
   final bool isPlaying;
-
-  /// Card de baixo da pilha. Opcional: sem ele o efeito continua, só
-  /// perde a sensação de profundidade.
-  final Widget? behind;
 
   const TriageCard({
     required this.item,
@@ -44,7 +38,6 @@ class TriageCard extends StatefulWidget {
     required this.onSwipeDown,
     required this.lastUsedAlbumLabel,
     this.isPlaying = false,
-    this.behind,
     super.key,
   });
 
@@ -215,49 +208,34 @@ class _TriageCardState extends State<TriageCard>
           builder: (context, child) {
             final horizontalProgress = _horizontalProgress;
             final verticalProgress = _verticalProgress;
-            final combinedProgress = _axis == _DragAxis.horizontal
-                ? horizontalProgress.abs()
-                : verticalProgress.abs();
 
-            return Stack(
-              alignment: Alignment.center,
-              children: [
-                if (widget.behind != null)
-                  Transform.scale(
-                    // Cresce conforme o card de cima se afasta: é o que
-                    // vende a sensação de pilha.
-                    scale: 0.92 + 0.08 * combinedProgress,
-                    child: Opacity(opacity: 0.6, child: widget.behind),
-                  ),
-                Transform(
-                  // Matrix4 único, translate antes de rotateZ. Aninhar
-                  // Transform.rotate por fora de Transform.translate
-                  // girava o eixo do arrasto: quanto maior o ângulo, mais
-                  // o movimento horizontal virava diagonal.
-                  transform: Matrix4.identity()
-                    ..translateByDouble(_position.dx, _position.dy, 0, 1)
-                    ..rotateZ(
-                      // Só o eixo horizontal gira — rotação num drag
-                      // vertical não tem correspondência física aqui.
-                      horizontalProgress * _maxRotationDegrees * math.pi / 180,
-                    ),
-                  // Pivô bem abaixo da tela. Girar na base do próprio
-                  // card produz tombo; o eixo distante produz pêndulo.
-                  origin: Offset(0, height * 0.6),
-                  alignment: Alignment.center,
-                  child: Stack(
-                    fit: StackFit.passthrough,
-                    children: [
-                      child!,
-                      SwipeOverlay(
-                        horizontalProgress: horizontalProgress,
-                        verticalProgress: verticalProgress,
-                        lastUsedAlbumLabel: widget.lastUsedAlbumLabel,
-                      ),
-                    ],
-                  ),
+            return Transform(
+              // Matrix4 único, translate antes de rotateZ. Aninhar
+              // Transform.rotate por fora de Transform.translate girava
+              // o eixo do arrasto: quanto maior o ângulo, mais o
+              // movimento horizontal virava diagonal.
+              transform: Matrix4.identity()
+                ..translateByDouble(_position.dx, _position.dy, 0, 1)
+                ..rotateZ(
+                  // Só o eixo horizontal gira — rotação num drag
+                  // vertical não tem correspondência física aqui.
+                  horizontalProgress * _maxRotationDegrees * math.pi / 180,
                 ),
-              ],
+              // Pivô bem abaixo da tela. Girar na base do próprio card
+              // produz tombo; o eixo distante produz pêndulo.
+              origin: Offset(0, height * 0.6),
+              alignment: Alignment.center,
+              child: Stack(
+                fit: StackFit.passthrough,
+                children: [
+                  child!,
+                  SwipeOverlay(
+                    horizontalProgress: horizontalProgress,
+                    verticalProgress: verticalProgress,
+                    lastUsedAlbumLabel: widget.lastUsedAlbumLabel,
+                  ),
+                ],
+              ),
             );
           },
         ),

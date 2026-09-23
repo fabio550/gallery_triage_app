@@ -12,7 +12,6 @@ import 'package:gallery_triage_app/core/presentation/widgets/progress_bar.dart';
 import 'package:gallery_triage_app/features/triage/application/triage_session_notifier.dart';
 import 'package:gallery_triage_app/features/triage/presentation/page/triage_review_page.dart';
 import 'package:gallery_triage_app/features/triage/presentation/widgets/album_panel.dart';
-import 'package:gallery_triage_app/features/triage/presentation/widgets/media_card.dart';
 import 'package:gallery_triage_app/features/triage/presentation/widgets/media_info_modal.dart';
 import 'package:gallery_triage_app/features/triage/presentation/widgets/triage_action_bar.dart';
 import 'package:gallery_triage_app/features/triage/presentation/widgets/triage_card.dart';
@@ -318,8 +317,6 @@ class _TriagePageState extends ConsumerState<TriagePage> {
     }
 
     final current = session.currentItem!;
-    final nextItem =
-        session.hasNext ? session.items[session.currentIndex + 1] : null;
 
     // 6.2.17 — "ao avançar, a reprodução é interrompida". Cobre swipe,
     // botões e salto pelo carrossel, já que todos mudam `current.id`.
@@ -405,8 +402,6 @@ class _TriagePageState extends ConsumerState<TriagePage> {
                     // anterior saiu.
                     key: ValueKey(current.id),
                     item: current,
-                    behind:
-                        nextItem != null ? MediaCard(item: nextItem) : null,
                     onSwipeLeft: notifier.markForDeletion,
                     onSwipeRight: notifier.keep,
                     onSwipeUp: notifier.classifyWithLastUsedAlbum,
