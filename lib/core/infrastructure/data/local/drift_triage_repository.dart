@@ -37,11 +37,12 @@ class DriftTriageRepository implements TriageRepository {
     CategoryRef ref, {
     required SortOrder sortOrder,
   }) async {
+    final predicate = await _resolveCategoryPredicate(ref);
     final query = _db.select(_db.mediaItemsTable)
       ..where(
         (t) => t.trashedInSystem.equals(false) & t.isAvailable.equals(true),
       )
-      ..where(_categoryPredicate(ref))
+      ..where(predicate)
       // 6.2.3 — sempre cronológica, direto pelo índice de dateTaken.
       ..orderBy([
         (t) => OrderingTerm(
@@ -53,6 +54,34 @@ class DriftTriageRepository implements TriageRepository {
       ]);
     final rows = await query.get();
     return rows.map(_toEntity).toList();
+  }
+
+  /// Igual a [_categoryPredicate], mas resolve o caso de álbum de forma
+  /// assíncrona: além de `albumId == ref.key` (classificação explícita,
+  /// 3.2.1), também casa por localização física
+  /// (`relativePath == album.effectiveRelativePath`) — é o que faz uma
+  /// categoria "automática" espelhada (Câmera, Screenshots etc., ver
+  /// [mirrorSystemFolder]) mostrar os itens que já moram lá sem
+  /// precisar marcar nada como classificado de antemão. Explícito
+  /// sempre tem prioridade sobre localização — ver [_summarizeByAlbum].
+  Future<Expression<bool> Function($MediaItemsTableTable)>
+      _resolveCategoryPredicate(CategoryRef ref) async {
+    if (ref.granularity != CategoryGranularity.album) {
+      return _categoryPredicate(ref);
+    }
+
+    final albumList = await albums();
+    AlbumEntity? album;
+    for (final a in albumList) {
+      if (a.id == ref.key) {
+        album = a;
+        break;
+      }
+    }
+    if (album == null) return _categoryPredicate(ref);
+
+    final path = album.effectiveRelativePath;
+    return (t) => t.albumId.equals(ref.key) | t.relativePath.equals(path);
   }
 
   @override
@@ -268,39 +297,27 @@ class DriftTriageRepository implements TriageRepository {
     return album;
   }
 
+  /// Só garante que o álbum exista — nunca decide nada por conta
+  /// própria. Marcar um item como mantido/classificado é o próprio
+  /// propósito da triagem (3.1/3.2); fazer isso automaticamente pra
+  /// tudo que já mora numa pasta do sistema (Câmera, Screenshots
+  /// inclusive) haveria de esvaziar esse propósito, já que a maioria
+  /// das fotos de um aparelho normal mora nelas. A pasta física
+  /// (`AlbumEntity.effectiveRelativePath`) já é suficiente pra agrupar
+  /// os itens dessa "categoria automática" no Dashboard e ao abrir a
+  /// categoria pra triagem (ver `_categoryPredicate`/`_summarizeByAlbum`)
+  /// — sem tocar em `decision` nem `albumId` de ninguém aqui. Retorna
+  /// 1 se um álbum novo foi criado (sinal pro chamador invalidar a
+  /// lista), 0 se já existia.
   @override
   Future<int> mirrorSystemFolder(String relativePath) async {
     final existing = await albums();
-    AlbumEntity? album;
-    for (final a in existing) {
-      if (a.effectiveRelativePath == relativePath) {
-        album = a;
-        break;
-      }
-    }
-    album ??= await _createMirroredAlbum(relativePath, existing);
+    final alreadyMirrored =
+        existing.any((a) => a.effectiveRelativePath == relativePath);
+    if (alreadyMirrored) return 0;
 
-    // Só item ainda não decidido: uma decisão que o usuário já tomou
-    // (mantido sem álbum, excluído, ou classificado noutro álbum) nunca
-    // é sobrescrita por este espelhamento automático.
-    return (_db.update(_db.mediaItemsTable)
-          ..where(
-            (t) =>
-                t.relativePath.equals(relativePath) &
-                t.albumId.isNull() &
-                t.decision.equals(TriageDecision.undecided.name),
-          ))
-        .write(
-      MediaItemsTableCompanion(
-        albumId: Value(album.id),
-        decision: const Value(TriageDecision.kept),
-        decidedAt: Value(DateTime.now()),
-        // O item já está fisicamente nesta pasta (é por isso que
-        // casou o filtro acima) — "endereço de origem" (6.5.7) é a
-        // própria pasta atual, não uma pasta anterior real.
-        preAlbumRelativePath: Value(relativePath),
-      ),
-    );
+    await _createMirroredAlbum(relativePath, existing);
+    return 1;
   }
 
   /// Cria o álbum espelhado. Nome pode colidir com um álbum manual já
@@ -730,9 +747,18 @@ class DriftTriageRepository implements TriageRepository {
     List<AlbumEntity> albumList,
   ) {
     final names = {for (final a in albumList) a.id: a.name};
+    // Categoria automática (Câmera, Screenshots etc., `mirrorSystemFolder`):
+    // item sem classificação explícita ainda entra no grupo por já
+    // morar fisicamente na pasta do álbum -- sem isso, um álbum
+    // espelhado apareceria sempre vazio (nada nele nunca foi
+    // classificado de propósito). Explícito (`item.albumId`) tem
+    // prioridade: só cai na pasta se a triagem não decidiu nada ainda.
+    final albumIdByPath = {
+      for (final a in albumList) a.effectiveRelativePath: a.id,
+    };
     final byAlbum = <String, List<MediaItemEntity>>{};
     for (final item in items) {
-      final albumId = item.albumId;
+      final albumId = item.albumId ?? albumIdByPath[item.relativePath];
       if (albumId == null) continue;
       byAlbum.putIfAbsent(albumId, () => []).add(item);
     }
