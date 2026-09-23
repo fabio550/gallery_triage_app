@@ -71,17 +71,25 @@ class SyncNotifier extends Notifier<SyncStatus> {
   }
 
   Future<void> _runIncrementalSync() async {
+    // Sinaliza pra UI que a sincronização está rodando por trás — ela
+    // pode demorar bem mais agora que espelha álbuns do sistema
+    // inteiro (`SyncService._mirrorSystemAlbums`), não só verificar
+    // itens novos; sem isso, uma categoria vazia esperando esse
+    // espelhamento terminar parecia travada, sem nenhum sinal de que
+    // ainda estava carregando.
+    if (ref.mounted) state = state.copyWith(isSyncing: true);
     try {
       final newCount = await _service.runIncrementalSync();
-      if (!ref.mounted || newCount == 0) return;
+      if (!ref.mounted) return;
+      if (newCount == 0) return;
 
-      // Mídia nova entrou no índice, e/ou álbuns do sistema foram
-      // espelhados/ganharam item novo (`SyncService._mirrorSystemAlbums`)
-      // — contagens do Dashboard, a lista de álbuns e sessões de
-      // triagem já abertas (que sobrevivem entre visitas, 6.2.4) ficaram
-      // desatualizadas. Invalida tudo pra recarregar do Drift. O
-      // recarregamento em si é quem decide pular o cursor pra mídia
-      // mais nova (`TriageSessionNotifier._resolveInitialIndex`).
+      // Mídia nova entrou no índice, e/ou uma pasta do sistema virou
+      // álbum novo (`SyncService._mirrorSystemAlbums`) — contagens do
+      // Dashboard, a lista de álbuns e sessões de triagem já abertas
+      // (que sobrevivem entre visitas, 6.2.4) ficaram desatualizadas.
+      // Invalida tudo pra recarregar do Drift. O recarregamento em si é
+      // quem decide pular o cursor pra mídia mais nova
+      // (`TriageSessionNotifier._resolveInitialIndex`).
       ref.invalidate(categoriesProvider);
       ref.invalidate(albumItemCountsProvider);
       ref.invalidate(triageSessionProvider);
@@ -90,6 +98,8 @@ class SyncNotifier extends Notifier<SyncStatus> {
       // 5.3.5 — não bloqueante; uma falha aqui não pode tirar o
       // usuário do que já está indexado. Sem tela de erro dedicada
       // pra isso ainda (P-XX a definir se vira recorrente).
+    } finally {
+      if (ref.mounted) state = state.copyWith(isSyncing: false);
     }
   }
 

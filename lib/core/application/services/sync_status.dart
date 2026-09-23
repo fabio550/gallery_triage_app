@@ -23,7 +23,12 @@ enum SyncPhase {
 }
 
 class SyncStatus {
-  const SyncStatus({required this.phase, this.processed = 0, this.error});
+  const SyncStatus({
+    required this.phase,
+    this.processed = 0,
+    this.error,
+    this.isSyncing = false,
+  });
 
   final SyncPhase phase;
 
@@ -33,4 +38,20 @@ class SyncStatus {
   final int processed;
 
   final Object? error;
+
+  /// A sincronização incremental (5.3.5) está rodando por trás agora —
+  /// independente de [phase] continuar `ready` durante ela. Só existe
+  /// pra UI que precisa saber "ainda não chegou dado nenhum, mas já
+  /// está buscando" (ex.: categoria vazia esperando o espelhamento de
+  /// álbuns terminar) — não bloqueia nada, ao contrário de
+  /// [SyncPhase.firstScanning].
+  final bool isSyncing;
+
+  SyncStatus copyWith({SyncPhase? phase, int? processed, bool? isSyncing}) =>
+      SyncStatus(
+        phase: phase ?? this.phase,
+        processed: processed ?? this.processed,
+        error: error,
+        isSyncing: isSyncing ?? this.isSyncing,
+      );
 }

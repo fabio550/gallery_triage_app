@@ -125,16 +125,19 @@ abstract class TriageRepository {
   /// `MediaRepository.discoverMediaFolders`) como álbum do app --
   /// reaproveita um álbum já existente com o mesmo `relativePath`
   /// (manual ou espelhado numa sincronização anterior) em vez de
-  /// duplicar. Ao contrário de [importAlbumFromFolder] (fluxo manual,
-  /// abre a pasta como destino sem tocar em item nenhum), este vincula
-  /// retroativamente todo item ainda não decidido que já está
-  /// fisicamente nela como mantido e classificado nesse álbum -- pedido
-  /// explícito de espelhar não só a pasta, mas a organização que já
-  /// existe na Galeria do sistema. Nunca sobrescreve uma decisão que o
-  /// usuário já tomou (item já mantido, excluído ou classificado
-  /// noutro álbum fica intocado). Chamado pelo `SyncService` a cada
-  /// sincronização, não pela UI. Retorna quantos itens foram
-  /// vinculados nesta chamada.
+  /// duplicar. Só garante que o álbum exista: nunca marca item nenhum
+  /// como mantido/classificado, nem aqui nem depois -- decidir isso é
+  /// o próprio propósito da triagem (3.1/3.2), e a maioria das fotos
+  /// de um aparelho já mora em alguma pasta do sistema (Câmera
+  /// inclusive), então fazer isso automaticamente esvaziaria esse
+  /// propósito. `itemsForCategory`/`categoriesFor` (granularidade
+  /// álbum) já mostram os itens que fisicamente moram na pasta do
+  /// álbum espelhado mesmo sem `albumId`, então essa categoria
+  /// "automática" aparece com contagem real no Dashboard e pode ser
+  /// aberta pra triagem normal, sem nada pré-decidido. Chamado pelo
+  /// `SyncService` a cada sincronização, não pela UI. Retorna 1 se um
+  /// álbum novo foi criado nesta chamada (sinal pro chamador invalidar
+  /// a lista), 0 se já existia.
   Future<int> mirrorSystemFolder(String relativePath);
 
   /// 6.5.5/6.5.6 — exclui o álbum. Os itens vinculados passam a

@@ -187,26 +187,26 @@ class SyncService {
   }
 
   /// Espelha cada pasta real do sistema com mídia como um álbum do app
-  /// (`TriageRepository.mirrorSystemFolder`), inclusive classificando
-  /// retroativamente os itens ainda não decididos que já estão nela —
-  /// pedido explícito de fazer a Tela Inicial ("agrupar por álbuns")
-  /// mostrar o mesmo que a Galeria do sistema, não só listar pastas
-  /// vazias esperando importação manual (6.5.8). Roda depois da
-  /// indexação em si (precisa dos itens já gravados pra classificar).
-  /// Best-effort por pasta: uma falha isolada (ex.: nome colidindo de
-  /// um jeito que a checagem de unicidade não previu) não deve derrubar
-  /// a sincronização inteira nem impedir as demais pastas.
+  /// (`TriageRepository.mirrorSystemFolder`) — pedido explícito de
+  /// fazer a Tela Inicial ("agrupar por álbuns") mostrar o mesmo que a
+  /// Galeria do sistema, não só listar pastas vazias esperando
+  /// importação manual (6.5.8). Só cria o álbum: nunca marca item
+  /// nenhum como mantido/classificado (ver doc de
+  /// `TriageRepository.mirrorSystemFolder` pro motivo). Best-effort por
+  /// pasta: uma falha isolada (ex.: nome colidindo de um jeito que a
+  /// checagem de unicidade não previu) não deve derrubar a
+  /// sincronização inteira nem impedir as demais pastas.
   Future<int> _mirrorSystemAlbums() async {
     final folders = await _media.discoverMediaFolders();
-    var linked = 0;
+    var newAlbums = 0;
     for (final folder in folders) {
       try {
-        linked += await _triage.mirrorSystemFolder(folder);
+        newAlbums += await _triage.mirrorSystemFolder(folder);
       } catch (_) {
         continue;
       }
     }
-    return linked;
+    return newAlbums;
   }
 
   Future<List<MediaItemEntity>> _buildNewEntities(
