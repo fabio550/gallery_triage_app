@@ -29,12 +29,13 @@ class SyncService {
 
   int _sequence = 0;
 
-  /// 5.1 — só DCIM e Pictures/Screenshots entram no índice.
-  bool _inScope(String relativePath) {
-    final normalized = relativePath.replaceAll('\\', '/');
-    return normalized.startsWith('DCIM') ||
-        normalized.startsWith('Pictures/Screenshots');
-  }
+  /// Antes restrito a DCIM + Pictures/Screenshots (5.1). O app agora
+  /// precisa espelhar TODOS os álbuns reais do sistema (WhatsApp
+  /// Images, Instagram, pastas de outros apps etc.), não só a câmera e
+  /// os screenshots — então toda mídia entra no índice; a pasta de
+  /// origem (`relativePath`) é o que [_mirrorSystemAlbums] usa depois
+  /// pra espelhar cada álbum.
+  bool _inScope(String relativePath) => true;
 
   /// 5.2 — primeiro scan. Resumível via `scanOffset` (5.2.4): sem
   /// detecção de ausência aqui, porque ela exigiria uma passada
@@ -72,6 +73,7 @@ class SyncService {
     }
 
     await _prefs.setScanOffset(null);
+    await _mirrorSystemAlbums();
     await _bumpLastSync();
   }
 
@@ -179,8 +181,32 @@ class SyncService {
     // pra true. Sem impacto na detecção de itens novos/ausentes/
     // retidos — gap isolado, independente do canal nativo de lixeira
     // (2.1.5, já usado acima).
+    final mirroredCount = await _mirrorSystemAlbums();
     await _bumpLastSync();
-    return newCount;
+    return newCount + mirroredCount;
+  }
+
+  /// Espelha cada pasta real do sistema com mídia como um álbum do app
+  /// (`TriageRepository.mirrorSystemFolder`), inclusive classificando
+  /// retroativamente os itens ainda não decididos que já estão nela —
+  /// pedido explícito de fazer a Tela Inicial ("agrupar por álbuns")
+  /// mostrar o mesmo que a Galeria do sistema, não só listar pastas
+  /// vazias esperando importação manual (6.5.8). Roda depois da
+  /// indexação em si (precisa dos itens já gravados pra classificar).
+  /// Best-effort por pasta: uma falha isolada (ex.: nome colidindo de
+  /// um jeito que a checagem de unicidade não previu) não deve derrubar
+  /// a sincronização inteira nem impedir as demais pastas.
+  Future<int> _mirrorSystemAlbums() async {
+    final folders = await _media.discoverMediaFolders();
+    var linked = 0;
+    for (final folder in folders) {
+      try {
+        linked += await _triage.mirrorSystemFolder(folder);
+      } catch (_) {
+        continue;
+      }
+    }
+    return linked;
   }
 
   Future<List<MediaItemEntity>> _buildNewEntities(

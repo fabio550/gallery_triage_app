@@ -268,6 +268,76 @@ class DriftTriageRepository implements TriageRepository {
     return album;
   }
 
+  @override
+  Future<int> mirrorSystemFolder(String relativePath) async {
+    final existing = await albums();
+    AlbumEntity? album;
+    for (final a in existing) {
+      if (a.effectiveRelativePath == relativePath) {
+        album = a;
+        break;
+      }
+    }
+    album ??= await _createMirroredAlbum(relativePath, existing);
+
+    // Só item ainda não decidido: uma decisão que o usuário já tomou
+    // (mantido sem álbum, excluído, ou classificado noutro álbum) nunca
+    // é sobrescrita por este espelhamento automático.
+    return (_db.update(_db.mediaItemsTable)
+          ..where(
+            (t) =>
+                t.relativePath.equals(relativePath) &
+                t.albumId.isNull() &
+                t.decision.equals(TriageDecision.undecided.name),
+          ))
+        .write(
+      MediaItemsTableCompanion(
+        albumId: Value(album.id),
+        decision: const Value(TriageDecision.kept),
+        decidedAt: Value(DateTime.now()),
+        // O item já está fisicamente nesta pasta (é por isso que
+        // casou o filtro acima) — "endereço de origem" (6.5.7) é a
+        // própria pasta atual, não uma pasta anterior real.
+        preAlbumRelativePath: Value(relativePath),
+      ),
+    );
+  }
+
+  /// Cria o álbum espelhado. Nome pode colidir com um álbum manual já
+  /// existente com o mesmo nome de pasta — sufixo numérico em vez de
+  /// derrubar a sincronização inteira por causa de um único álbum
+  /// espelhado (diferente de [importAlbumFromFolder], fluxo manual
+  /// onde faz sentido lançar `AlbumNameException` e deixar o usuário
+  /// escolher outro nome).
+  Future<AlbumEntity> _createMirroredAlbum(
+    String relativePath,
+    List<AlbumEntity> existing,
+  ) async {
+    final leafName = _leafFolderName(relativePath);
+    var name = leafName;
+    var suffix = 2;
+    while (existing.any((a) => a.name.toLowerCase() == name.toLowerCase())) {
+      name = '$leafName ($suffix)';
+      suffix++;
+    }
+
+    final album = AlbumEntity(
+      id: 'album-${DateTime.now().microsecondsSinceEpoch}',
+      name: name,
+      createdAt: DateTime.now(),
+      relativePath: relativePath,
+    );
+    await _db.into(_db.albumsTable).insert(
+          AlbumsTableCompanion.insert(
+            id: album.id,
+            name: album.name,
+            createdAt: album.createdAt,
+            relativePath: Value(album.relativePath),
+          ),
+        );
+    return album;
+  }
+
   /// Último segmento de um `RELATIVE_PATH` do MediaStore (sempre com
   /// barra no final, ex.: "DCIM/Camera/" -> "Camera") — nome de exibição
   /// padrão para um álbum importado (6.5.8).

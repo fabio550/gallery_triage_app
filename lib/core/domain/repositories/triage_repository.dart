@@ -121,6 +121,22 @@ abstract class TriageRepository {
   /// igual a qualquer outro álbum.
   Future<AlbumEntity> importAlbumFromFolder(String relativePath);
 
+  /// Espelha uma pasta real do sistema (descoberta via
+  /// `MediaRepository.discoverMediaFolders`) como álbum do app --
+  /// reaproveita um álbum já existente com o mesmo `relativePath`
+  /// (manual ou espelhado numa sincronização anterior) em vez de
+  /// duplicar. Ao contrário de [importAlbumFromFolder] (fluxo manual,
+  /// abre a pasta como destino sem tocar em item nenhum), este vincula
+  /// retroativamente todo item ainda não decidido que já está
+  /// fisicamente nela como mantido e classificado nesse álbum -- pedido
+  /// explícito de espelhar não só a pasta, mas a organização que já
+  /// existe na Galeria do sistema. Nunca sobrescreve uma decisão que o
+  /// usuário já tomou (item já mantido, excluído ou classificado
+  /// noutro álbum fica intocado). Chamado pelo `SyncService` a cada
+  /// sincronização, não pela UI. Retorna quantos itens foram
+  /// vinculados nesta chamada.
+  Future<int> mirrorSystemFolder(String relativePath);
+
   /// 6.5.5/6.5.6 — exclui o álbum. Os itens vinculados passam a
   /// `albumId` null, preservando `decision` (mantido não muda). A
   /// contagem de itens afetados (pro diálogo de confirmação) vem de
