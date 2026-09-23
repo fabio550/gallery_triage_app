@@ -2,9 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gallery_triage_app/core/application/providers/thumbnail_provider.dart';
 import 'package:gallery_triage_app/core/domain/entities/media_item_entity.dart';
-import 'package:gallery_triage_app/core/presentation/theme/triage_colors.dart';
-import 'package:gallery_triage_app/core/presentation/theme/triage_visual_state.dart';
-import 'package:gallery_triage_app/core/presentation/widgets/media_placeholder.dart';
 
 /// 6.2.8 — "carregado na resolução da tela, nunca em resolução
 /// original" (8.6). Com o card ocupando quase a tela inteira, um valor
@@ -34,9 +31,6 @@ class MediaCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Precedência de 3.3 — mesma regra usada no carrossel (CarouselThumb).
-    final borderColor =
-        TriageVisualState.of(item).colorIn(context.triageColors);
     final thumbnail = ref.watch(
       thumbnailProvider((item.mediaStoreId, _cardThumbnailSize(context))),
     );
@@ -45,23 +39,16 @@ class MediaCard extends ConsumerWidget {
     // sem largura/altura fixa aqui, ao contrário do card quadrado
     // anterior). `BoxFit.contain` em vez de `cover`: a triagem depende
     // de ver a foto inteira, não uma versão cortada dela — sobra
-    // "letterbox" da cor de placeholder nas proporções que não batem
-    // com a tela, em vez de perder conteúdo nas bordas.
+    // transparência nas proporções que não batem com a tela, em vez de
+    // perder conteúdo nas bordas. Sem borda nem fundo colorido: a foto
+    // ocupa o espaço a descoberto, sem moldura.
     return Padding(
       padding: const EdgeInsets.all(12),
       child: Container(
         clipBehavior: Clip.antiAlias,
-        decoration: BoxDecoration(
-          color: mediaPlaceholderColor(item.id),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: borderColor, width: 4),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.3),
-              blurRadius: 8,
-              offset: const Offset(0, 4),
-            ),
-          ],
+        decoration: const BoxDecoration(
+          color: Colors.transparent,
+          borderRadius: BorderRadius.all(Radius.circular(10)),
         ),
         child: Stack(
           fit: StackFit.expand,
@@ -71,8 +58,8 @@ class MediaCard extends ConsumerWidget {
                   ? const SizedBox.shrink()
                   : Image.memory(bytes, fit: BoxFit.contain),
               loading: () => const SizedBox.shrink(),
-              // §7 — falha de leitura de miniatura: o placeholder de cor
-              // já preenche o fundo, o item continua triável normalmente.
+              // §7 — falha de leitura de miniatura: fica só o fundo
+              // transparente, o item continua triável normalmente.
               error: (Object error, StackTrace stackTrace) =>
                   const SizedBox.shrink(),
             ),

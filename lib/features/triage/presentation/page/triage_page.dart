@@ -480,45 +480,59 @@ class _TriagePageState extends ConsumerState<TriagePage> {
                         ),
                       ),
                     ),
-                ],
-              ),
-            ),
-            // Alça no rodapé (6.2.16) — segundo ponto de entrada do
-            // painel, equivalente ao swipe para baixo.
-            GestureDetector(
-              onTap: () => _openAlbumPanel(current.albumId),
-              behavior: HitTestBehavior.opaque,
-              child: const Padding(
-                padding: EdgeInsets.symmetric(vertical: 6),
-                child: Center(
-                  child: SizedBox(
-                    width: 32,
-                    height: 4,
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        color: Colors.white24,
-                        borderRadius: BorderRadius.all(Radius.circular(2)),
+                  // Alça (6.2.16) + barra de ação flutuando sobre a
+                  // própria foto, perto do rodapé — o card ocupa o
+                  // espaço inteiro por baixo delas em vez de ceder uma
+                  // faixa fixa da tela. `SafeArea` aqui faz o mesmo
+                  // papel que o antigo `bottomNavigationBar`: afasta os
+                  // botões da barra de gestos do sistema em aparelhos
+                  // sem os três botões clássicos.
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    child: SafeArea(
+                      top: false,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          GestureDetector(
+                            onTap: () => _openAlbumPanel(current.albumId),
+                            behavior: HitTestBehavior.opaque,
+                            child: const Padding(
+                              padding: EdgeInsets.symmetric(vertical: 6),
+                              child: Center(
+                                child: SizedBox(
+                                  width: 32,
+                                  height: 4,
+                                  child: DecoratedBox(
+                                    decoration: BoxDecoration(
+                                      color: Colors.white24,
+                                      borderRadius:
+                                          BorderRadius.all(Radius.circular(2)),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                          TriageActionBar(
+                            onDelete: notifier.markForDeletion,
+                            onSkip: notifier.skip,
+                            onKeep: notifier.keep,
+                            isVideo: current.isVideo,
+                            isPlaying: _isPlaying,
+                            onTogglePlay: () =>
+                                setState(() => _isPlaying = !_isPlaying),
+                          ),
+                        ],
                       ),
                     ),
                   ),
-                ),
+                ],
               ),
             ),
           ],
-        ),
-        // Fora do body, no slot que o Scaffold já protege da barra de
-        // navegação do sistema — mesmo padrão de `TriageReviewPage`.
-        // Direto no body (como estava) a fileira de baixo ficava sob a
-        // barra de gestos em aparelhos sem os três botões clássicos.
-        bottomNavigationBar: SafeArea(
-          child: TriageActionBar(
-            onDelete: notifier.markForDeletion,
-            onSkip: notifier.skip,
-            onKeep: notifier.keep,
-            isVideo: current.isVideo,
-            isPlaying: _isPlaying,
-            onTogglePlay: () => setState(() => _isPlaying = !_isPlaying),
-          ),
         ),
       ),
     );
