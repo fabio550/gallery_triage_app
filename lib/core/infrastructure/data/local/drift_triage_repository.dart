@@ -297,27 +297,72 @@ class DriftTriageRepository implements TriageRepository {
     return album;
   }
 
-  /// Só garante que o álbum exista — nunca decide nada por conta
-  /// própria. Marcar um item como mantido/classificado é o próprio
-  /// propósito da triagem (3.1/3.2); fazer isso automaticamente pra
-  /// tudo que já mora numa pasta do sistema (Câmera, Screenshots
-  /// inclusive) haveria de esvaziar esse propósito, já que a maioria
-  /// das fotos de um aparelho normal mora nelas. A pasta física
-  /// (`AlbumEntity.effectiveRelativePath`) já é suficiente pra agrupar
-  /// os itens dessa "categoria automática" no Dashboard e ao abrir a
-  /// categoria pra triagem (ver `_categoryPredicate`/`_summarizeByAlbum`)
-  /// — sem tocar em `decision` nem `albumId` de ninguém aqui. Retorna
-  /// 1 se um álbum novo foi criado (sinal pro chamador invalidar a
-  /// lista), 0 se já existia.
+  /// Sempre garante que o álbum exista. Só classifica retroativamente
+  /// (mantido + vinculado) os itens que já moram nele quando a pasta
+  /// não é uma categoria automática da galeria (ver [_isAutomaticBucket]:
+  /// Câmera padrão, Screenshots) — essas são "onde a mídia cai
+  /// sozinha", não uma organização deliberada, e classificar tudo nelas
+  /// de cara esvaziaria o propósito da triagem (3.1/3.2), já que é onde
+  /// mora a maioria das fotos de um aparelho normal. Qualquer outra
+  /// pasta real (WhatsApp Images, Instagram, um álbum que o usuário já
+  /// organizou pela Galeria do sistema etc.) representa uma
+  /// classificação que o usuário já fez fora do app — espelhar isso
+  /// como mantido/classificado é reconhecer essa decisão, não pular a
+  /// triagem. Nunca sobrescreve uma decisão que o usuário já tomou
+  /// dentro do app (item já mantido sem álbum, excluído, ou
+  /// classificado noutro álbum fica intocado). Retorna quantos itens
+  /// foram vinculados nesta chamada (0 se a pasta é automática ou já
+  /// não sobrou nada pra classificar).
   @override
   Future<int> mirrorSystemFolder(String relativePath) async {
     final existing = await albums();
-    final alreadyMirrored =
-        existing.any((a) => a.effectiveRelativePath == relativePath);
-    if (alreadyMirrored) return 0;
+    AlbumEntity? album;
+    for (final a in existing) {
+      if (a.effectiveRelativePath == relativePath) {
+        album = a;
+        break;
+      }
+    }
+    album ??= await _createMirroredAlbum(relativePath, existing);
 
-    await _createMirroredAlbum(relativePath, existing);
-    return 1;
+    if (_isAutomaticBucket(relativePath)) return 0;
+
+    // Só item ainda não decidido: uma decisão que o usuário já tomou
+    // dentro do app nunca é sobrescrita por este espelhamento.
+    return (_db.update(_db.mediaItemsTable)
+          ..where(
+            (t) =>
+                t.relativePath.equals(relativePath) &
+                t.albumId.isNull() &
+                t.decision.equals(TriageDecision.undecided.name),
+          ))
+        .write(
+      MediaItemsTableCompanion(
+        albumId: Value(album.id),
+        decision: const Value(TriageDecision.kept),
+        decidedAt: Value(DateTime.now()),
+        // O item já está fisicamente nesta pasta (é por isso que
+        // casou o filtro acima) — "endereço de origem" (6.5.7) é a
+        // própria pasta atual, não uma pasta anterior real.
+        preAlbumRelativePath: Value(relativePath),
+      ),
+    );
+  }
+
+  /// Câmera padrão (`DCIM/Camera/`, ou mídia solta direto em `DCIM/`
+  /// sem subpasta em aparelhos antigos) e Screenshots — mesma regra de
+  /// [MediaItemEntity.isScreenshot] — são "onde a mídia cai sozinha" só
+  /// por tirar uma foto ou capturar a tela, nunca uma organização
+  /// deliberada. Qualquer outra pasta (mesmo dentro de `DCIM/`, ex.:
+  /// `DCIM/WhatsApp/`) é tratada como álbum de verdade.
+  bool _isAutomaticBucket(String relativePath) {
+    final normalized = relativePath.toLowerCase();
+    if (normalized.contains('screenshot')) return true;
+
+    final trimmed = normalized.endsWith('/')
+        ? normalized.substring(0, normalized.length - 1)
+        : normalized;
+    return trimmed == 'dcim' || trimmed == 'dcim/camera';
   }
 
   /// Cria o álbum espelhado. Nome pode colidir com um álbum manual já

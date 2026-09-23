@@ -125,19 +125,27 @@ abstract class TriageRepository {
   /// `MediaRepository.discoverMediaFolders`) como álbum do app --
   /// reaproveita um álbum já existente com o mesmo `relativePath`
   /// (manual ou espelhado numa sincronização anterior) em vez de
-  /// duplicar. Só garante que o álbum exista: nunca marca item nenhum
-  /// como mantido/classificado, nem aqui nem depois -- decidir isso é
-  /// o próprio propósito da triagem (3.1/3.2), e a maioria das fotos
-  /// de um aparelho já mora em alguma pasta do sistema (Câmera
-  /// inclusive), então fazer isso automaticamente esvaziaria esse
-  /// propósito. `itemsForCategory`/`categoriesFor` (granularidade
-  /// álbum) já mostram os itens que fisicamente moram na pasta do
-  /// álbum espelhado mesmo sem `albumId`, então essa categoria
-  /// "automática" aparece com contagem real no Dashboard e pode ser
-  /// aberta pra triagem normal, sem nada pré-decidido. Chamado pelo
-  /// `SyncService` a cada sincronização, não pela UI. Retorna 1 se um
-  /// álbum novo foi criado nesta chamada (sinal pro chamador invalidar
-  /// a lista), 0 se já existia.
+  /// duplicar. Sempre cria/reaproveita o álbum; só vincula
+  /// retroativamente (mantido + classificado) os itens ainda não
+  /// decididos que já estão fisicamente nele quando a pasta NÃO é uma
+  /// categoria automática da galeria (Câmera padrão, Screenshots --
+  /// "onde a mídia cai sozinha", não uma organização deliberada, e
+  /// fazer isso ali esvaziaria o propósito da triagem, 3.1/3.2, já que
+  /// é onde mora a maioria das fotos de um aparelho normal). Qualquer
+  /// outra pasta (WhatsApp Images, Instagram, um álbum que o usuário já
+  /// organizou pela Galeria do sistema etc.) É vinculada: representa
+  /// uma classificação que o usuário já fez fora do app, e espelhar
+  /// isso como mantido/classificado reconhece essa decisão em vez de
+  /// pular a triagem. Nunca sobrescreve uma decisão já tomada dentro do
+  /// app (item já mantido sem álbum, excluído, ou classificado noutro
+  /// álbum fica intocado). Mesmo nas pastas automáticas,
+  /// `itemsForCategory`/`categoriesFor` (granularidade álbum) mostram
+  /// os itens que já moram fisicamente ali por localização, sem
+  /// `albumId` — a categoria aparece com contagem real, aberta pra
+  /// triagem normal, sem nada pré-decidido. Chamado pelo `SyncService`
+  /// a cada sincronização, não pela UI. Retorna quantos itens foram
+  /// vinculados nesta chamada (0 se a pasta é automática, ou se já não
+  /// sobrou item pra vincular).
   Future<int> mirrorSystemFolder(String relativePath);
 
   /// 6.5.5/6.5.6 — exclui o álbum. Os itens vinculados passam a

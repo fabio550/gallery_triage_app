@@ -83,9 +83,10 @@ class SyncNotifier extends Notifier<SyncStatus> {
       if (!ref.mounted) return;
       if (newCount == 0) return;
 
-      // Mídia nova entrou no índice, e/ou uma pasta do sistema virou
-      // álbum novo (`SyncService._mirrorSystemAlbums`) — contagens do
-      // Dashboard, a lista de álbuns e sessões de triagem já abertas
+      // Mídia nova entrou no índice, e/ou o espelhamento de álbuns
+      // (`SyncService._mirrorSystemAlbums`) criou um álbum novo ou
+      // vinculou itens a um álbum já organizado fora do app — contagens
+      // do Dashboard, a lista de álbuns e sessões de triagem já abertas
       // (que sobrevivem entre visitas, 6.2.4) ficaram desatualizadas.
       // Invalida tudo pra recarregar do Drift. O recarregamento em si é
       // quem decide pular o cursor pra mídia mais nova

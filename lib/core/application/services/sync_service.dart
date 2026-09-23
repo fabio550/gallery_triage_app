@@ -190,23 +190,24 @@ class SyncService {
   /// (`TriageRepository.mirrorSystemFolder`) — pedido explícito de
   /// fazer a Tela Inicial ("agrupar por álbuns") mostrar o mesmo que a
   /// Galeria do sistema, não só listar pastas vazias esperando
-  /// importação manual (6.5.8). Só cria o álbum: nunca marca item
-  /// nenhum como mantido/classificado (ver doc de
+  /// importação manual (6.5.8). Sempre cria o álbum; só marca item como
+  /// mantido/classificado quando a pasta não é uma categoria automática
+  /// da galeria (Câmera padrão, Screenshots — ver doc de
   /// `TriageRepository.mirrorSystemFolder` pro motivo). Best-effort por
   /// pasta: uma falha isolada (ex.: nome colidindo de um jeito que a
   /// checagem de unicidade não previu) não deve derrubar a
   /// sincronização inteira nem impedir as demais pastas.
   Future<int> _mirrorSystemAlbums() async {
     final folders = await _media.discoverMediaFolders();
-    var newAlbums = 0;
+    var linked = 0;
     for (final folder in folders) {
       try {
-        newAlbums += await _triage.mirrorSystemFolder(folder);
+        linked += await _triage.mirrorSystemFolder(folder);
       } catch (_) {
         continue;
       }
     }
-    return newAlbums;
+    return linked;
   }
 
   Future<List<MediaItemEntity>> _buildNewEntities(
