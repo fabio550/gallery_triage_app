@@ -30,6 +30,9 @@ class TriageCard extends StatefulWidget {
 
   final bool isPlaying;
 
+  /// Vídeo chegou ao fim sozinho — repassado direto do `MediaCard`.
+  final VoidCallback? onPlaybackEnded;
+
   const TriageCard({
     required this.item,
     required this.onSwipeLeft,
@@ -38,6 +41,7 @@ class TriageCard extends StatefulWidget {
     required this.onSwipeDown,
     required this.lastUsedAlbumLabel,
     this.isPlaying = false,
+    this.onPlaybackEnded,
     super.key,
   });
 
@@ -204,7 +208,11 @@ class _TriageCardState extends State<TriageCard>
           animation: _controller,
           // Fora do builder: a árvore da mídia não reconstrói a cada
           // frame de mola nem de arrasto, só o Transform.
-          child: MediaCard(item: widget.item, isPlaying: widget.isPlaying),
+          child: MediaCard(
+            item: widget.item,
+            isPlaying: widget.isPlaying,
+            onPlaybackEnded: widget.onPlaybackEnded,
+          ),
           builder: (context, child) {
             final horizontalProgress = _horizontalProgress;
             final verticalProgress = _verticalProgress;

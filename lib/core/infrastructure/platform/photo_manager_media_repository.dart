@@ -194,4 +194,22 @@ class PhotoManagerMediaRepository implements MediaRepository {
       return const [];
     }
   }
+
+  @override
+  Future<String?> videoFilePath(int mediaStoreId) async {
+    try {
+      final asset = await AssetEntity.fromId(mediaStoreId.toString());
+      if (asset == null) return null;
+      // `.file` baixa/copia pro cache local se preciso (irrelevante
+      // aqui, sem suporte a iCloud no Android) e devolve o arquivo já
+      // pronto pra abrir — é o mesmo caminho que qualquer player
+      // (video_player incluso) precisa pra decodificar.
+      final file = await asset.file;
+      return file?.path;
+    } catch (_) {
+      // §7 — falha de resolução nunca sobe pra UI; a tela cai no
+      // pôster estático (miniatura) em vez de travar.
+      return null;
+    }
+  }
 }
