@@ -71,9 +71,17 @@ class SyncNotifier extends Notifier<SyncStatus> {
   }
 
   Future<void> _runIncrementalSync() async {
+    // Sinaliza pra UI que a sincronização está rodando por trás — ela
+    // pode demorar bem mais agora que espelha álbuns do sistema
+    // inteiro (`SyncService._mirrorSystemAlbums`), não só verificar
+    // itens novos; sem isso, uma categoria vazia esperando esse
+    // espelhamento terminar parecia travada, sem nenhum sinal de que
+    // ainda estava carregando.
+    if (ref.mounted) state = state.copyWith(isSyncing: true);
     try {
       final newCount = await _service.runIncrementalSync();
-      if (!ref.mounted || newCount == 0) return;
+      if (!ref.mounted) return;
+      if (newCount == 0) return;
 
       // Mídia nova entrou no índice, e/ou álbuns do sistema foram
       // espelhados/ganharam item novo (`SyncService._mirrorSystemAlbums`)
@@ -90,6 +98,8 @@ class SyncNotifier extends Notifier<SyncStatus> {
       // 5.3.5 — não bloqueante; uma falha aqui não pode tirar o
       // usuário do que já está indexado. Sem tela de erro dedicada
       // pra isso ainda (P-XX a definir se vira recorrente).
+    } finally {
+      if (ref.mounted) state = state.copyWith(isSyncing: false);
     }
   }
 
