@@ -84,4 +84,11 @@ abstract class MediaRepository {
   /// (não é uma entidade própria, só um valor de coluna compartilhado
   /// entre arquivos). Lista vazia se o canal falhar — nunca exceção.
   Future<List<String>> discoverMediaFolders();
+
+  /// Caminho do arquivo local de um vídeo, pra reprodução real na
+  /// Tela de Triagem (6.2.17). `null` se o item não existe mais no
+  /// MediaStore ou o arquivo não pôde ser resolvido — a UI cai no
+  /// pôster estático (miniatura) em vez de travar tentando reproduzir
+  /// algo inexistente (§7).
+  Future<String?> videoFilePath(int mediaStoreId);
 }

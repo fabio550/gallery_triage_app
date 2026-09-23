@@ -408,6 +408,7 @@ class _TriagePageState extends ConsumerState<TriagePage> {
                     onSwipeDown: () => _openAlbumPanel(current.albumId),
                     lastUsedAlbumLabel: lastUsedAlbumLabel,
                     isPlaying: _isPlaying,
+                    onPlaybackEnded: () => setState(() => _isPlaying = false),
                   ),
                   // Overlay topo-esquerdo (6.2.10). Desabilitado com a
                   // pilha vazia — `onPressed: null` já cobre isso, sem

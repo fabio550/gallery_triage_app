@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gallery_triage_app/core/application/providers/thumbnail_provider.dart';
 import 'package:gallery_triage_app/core/domain/entities/media_item_entity.dart';
+import 'package:gallery_triage_app/features/triage/presentation/widgets/video_preview.dart';
 
 /// 6.2.8 — "carregado na resolução da tela, nunca em resolução
 /// original" (8.6). Com o card ocupando quase a tela inteira, um valor
@@ -18,14 +19,18 @@ int _cardThumbnailSize(BuildContext context) {
 class MediaCard extends ConsumerWidget {
   final MediaItemEntity item;
 
-  /// 6.2.17 — só troca o ícone de play/pause; é o card do próximo item
-  /// (`behind`) que nunca deve receber `true`, já que ele não é o item
-  /// ativo.
+  /// 6.2.17 — controla a reprodução real do vídeo (`VideoPreview`) e o
+  /// ícone central quando pausado.
   final bool isPlaying;
+
+  /// Vídeo chegou ao fim sozinho — repassado direto do `VideoPreview`
+  /// pra quem possui o estado de `isPlaying` (a Tela de Triagem).
+  final VoidCallback? onPlaybackEnded;
 
   const MediaCard({
     required this.item,
     this.isPlaying = false,
+    this.onPlaybackEnded,
     super.key,
   });
 
@@ -53,6 +58,10 @@ class MediaCard extends ConsumerWidget {
         child: Stack(
           fit: StackFit.expand,
           children: [
+            // Pôster: sempre desenhado, vídeo incluso — cobre o tempo
+            // de carregamento do `VideoPreview` (resolver o arquivo +
+            // inicializar o controller) e continua servindo de
+            // fallback se a decodificação falhar (§7).
             thumbnail.when(
               data: (bytes) => bytes == null
                   ? const SizedBox.shrink()
@@ -63,16 +72,24 @@ class MediaCard extends ConsumerWidget {
               error: (Object error, StackTrace stackTrace) =>
                   const SizedBox.shrink(),
             ),
-            if (item.isVideo)
-              Center(
-                child: Icon(
-                  isPlaying
-                      ? Icons.pause_circle_outline
-                      : Icons.play_circle_outline,
-                  size: 48,
-                  color: Colors.white70,
-                ),
+            if (item.isVideo) ...[
+              VideoPreview(
+                item: item,
+                isPlaying: isPlaying,
+                onPlaybackEnded: onPlaybackEnded,
               ),
+              // Afordância de "toque pra reproduzir" — só enquanto
+              // pausado; escondida durante a reprodução pra não tapar
+              // o vídeo com um ícone gigante o tempo todo.
+              if (!isPlaying)
+                const Center(
+                  child: Icon(
+                    Icons.play_circle_outline,
+                    size: 48,
+                    color: Colors.white70,
+                  ),
+                ),
+            ],
           ],
         ),
       ),
