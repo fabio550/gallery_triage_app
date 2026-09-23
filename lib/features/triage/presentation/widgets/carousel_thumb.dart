@@ -34,13 +34,15 @@ class CarouselThumb extends ConsumerWidget {
         width: 90,
         height: 90,
         margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-        padding: const EdgeInsets.all(3),
+        padding: const EdgeInsets.all(2),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
-          // Contorno de seleção do item ativo (6.2.6) — deliberadamente
-          // um elemento visual separado da borda de estado abaixo, para
-          // não se confundirem.
-          border: isActive ? Border.all(color: Colors.white, width: 3) : null,
+          // Retangular, sem cantos arredondados: o arredondamento
+          // combinado com a borda colorida de estado não fechava
+          // direito no canto (o ângulo da borda não acompanhava o
+          // clip do conteúdo), deixando um resíduo escuro por cima da
+          // miniatura. Contorno de seleção do item ativo (6.2.6) —
+          // mais fino que antes.
+          border: isActive ? Border.all(color: Colors.white, width: 2) : null,
           boxShadow: isActive
               ? [
                   BoxShadow(
@@ -52,14 +54,7 @@ class CarouselThumb extends ConsumerWidget {
               : const [],
         ),
         child: Container(
-          clipBehavior: Clip.antiAlias,
-          decoration: BoxDecoration(
-            color: mediaPlaceholderColor(item.id),
-            borderRadius: BorderRadius.circular(9),
-            // Borda de estado (6.2.7, precedência 3.3) — sempre visível,
-            // ativo ou não.
-            border: Border.all(color: stateColor, width: 2),
-          ),
+          color: mediaPlaceholderColor(item.id),
           child: Stack(
             fit: StackFit.expand,
             children: [
@@ -75,6 +70,13 @@ class CarouselThumb extends ConsumerWidget {
                 const Center(
                   child: Icon(Icons.videocam, size: 16, color: Colors.white70),
                 ),
+              // Faixa de estado (6.2.7, precedência 3.3) — reta, só na
+              // borda de baixo, em vez do contorno colorido ao redor
+              // de toda a miniatura.
+              Align(
+                alignment: Alignment.bottomCenter,
+                child: Container(height: 5, color: stateColor),
+              ),
             ],
           ),
         ),
