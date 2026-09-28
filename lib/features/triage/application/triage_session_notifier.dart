@@ -39,9 +39,16 @@ class TriageSessionNotifier extends Notifier<TriageSessionState> {
 
   static const _maxUndoEntries = 40;
 
-  late final TriageRepository _repository;
-  late final MediaRepository _mediaRepository;
-  late final PreferencesRepository _preferencesRepository;
+  // `late` sem `final`: hot reload pode chamar `build()` de novo na
+  // MESMA instância de Notifier (em vez de criar uma nova) pra aplicar
+  // código alterado -- com `final` a segunda atribuição lançava
+  // LateInitializationError ("has already been initialized") toda vez
+  // que este arquivo (ou algo que ele importa) mudava e o app rodava
+  // com hot reload em vez de hot restart. Sem `final`, a reatribuição
+  // é inofensiva.
+  late TriageRepository _repository;
+  late MediaRepository _mediaRepository;
+  late PreferencesRepository _preferencesRepository;
 
   @override
   TriageSessionState build() {
